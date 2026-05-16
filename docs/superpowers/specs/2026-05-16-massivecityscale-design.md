@@ -110,7 +110,7 @@ massivecityscale/
 
 ## Dependencies
 
-- `bevy` 0.14 — engine, ECS, rendering
+- `bevy` (latest stable) — engine, ECS, rendering
 - `noise` — simplex noise for terrain and building heights
 - `rand` — seeded RNG for placement (Poisson disk, block layouts)
 
