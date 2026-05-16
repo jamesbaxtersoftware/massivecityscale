@@ -14,6 +14,7 @@ impl Plugin for RendererPlugin {
             terrain::spawn_water_plane,
             terrain::spawn_continent_patches,
             terrain::spawn_planet_sphere,
+            solar::spawn_solar_system,
         ).chain());
     }
 }
