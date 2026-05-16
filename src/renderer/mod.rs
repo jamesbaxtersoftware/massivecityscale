@@ -11,6 +11,8 @@ impl Plugin for RendererPlugin {
         app.add_systems(Startup, (
             terrain::spawn_ground,
             buildings::spawn_street_buildings,
+            buildings::spawn_block_level,
+            buildings::spawn_city_level,
             terrain::spawn_water_plane,
             terrain::spawn_continent_patches,
             terrain::spawn_planet_sphere,
