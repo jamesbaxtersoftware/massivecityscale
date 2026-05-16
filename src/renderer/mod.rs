@@ -12,6 +12,8 @@ impl Plugin for RendererPlugin {
             terrain::spawn_ground,
             buildings::spawn_street_buildings,
             terrain::spawn_water_plane,
+            terrain::spawn_continent_patches,
+            terrain::spawn_planet_sphere,
         ).chain());
     }
 }
