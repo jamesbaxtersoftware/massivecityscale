@@ -71,7 +71,9 @@ pub fn spawn_block_level(
                     block.buildings.iter().map(|b| b.height).sum::<f32>() / block.buildings.len() as f32
                 };
 
-                let mesh = meshes.add(Cuboid::new(0.7, avg_height * 0.3, 0.7));
+                let box_height = avg_height * 0.3;
+                let mesh = meshes.add(Cuboid::new(0.7, box_height, 0.7));
+                // Block level uses uniform color — individual height variation averages out at this scale
                 let material = materials.add(StandardMaterial {
                     base_color: theme.buildings.residential,
                     ..default()
@@ -79,7 +81,7 @@ pub fn spawn_block_level(
                 commands.spawn((
                     Mesh3d(mesh),
                     MeshMaterial3d(material),
-                    Transform::from_xyz(block.x, avg_height * 0.15, block.z),
+                    Transform::from_xyz(block.x, box_height / 2.0, block.z),
                 )).set_parent(parent);
             }
         }
@@ -101,12 +103,13 @@ pub fn spawn_city_level(
     let Some(parent) = city_entity else { return };
 
     for city in &world.cities {
-        let scale = city.districts.len() as f32 * 0.3 + 1.0;
-        let mesh = meshes.add(Cuboid::new(scale, scale * 0.1, scale));
+        let city_size = city.districts.len() as f32 * 0.3 + 1.0;
+        let mesh = meshes.add(Cuboid::new(city_size, city_size * 0.1, city_size));
         let material = materials.add(StandardMaterial {
             base_color: theme.buildings.commercial,
             ..default()
         });
+        // lat/lon are in planet grid coords (0..64); scale to city space (-16..16)
         commands.spawn((
             Mesh3d(mesh),
             MeshMaterial3d(material),
