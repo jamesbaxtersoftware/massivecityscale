@@ -1,3 +1,5 @@
+mod world_gen;
+
 use bevy::prelude::*;
 
 fn main() {
