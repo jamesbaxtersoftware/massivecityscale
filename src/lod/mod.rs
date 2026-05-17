@@ -39,7 +39,7 @@ mod tests {
     fn entity_visible_within_lod_range() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
-           .insert_resource(ZoomLevel { value: 0.0 }) // scale = 0.001
+           .insert_resource(ZoomLevel { value: 0.0 }) // fully zoomed in
            .add_plugins(LodPlugin);
 
         let entity = app.world_mut().spawn((
@@ -57,7 +57,7 @@ mod tests {
     fn entity_hidden_above_lod_range() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
-           .insert_resource(ZoomLevel { value: 1.0 }) // scale = ~16
+           .insert_resource(ZoomLevel { value: 1.0 }) // fully zoomed out
            .add_plugins(LodPlugin);
 
         let entity = app.world_mut().spawn((
@@ -75,7 +75,7 @@ mod tests {
     fn entity_hidden_below_lod_range() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
-           .insert_resource(ZoomLevel { value: 0.0 }) // scale = 0.001
+           .insert_resource(ZoomLevel { value: 0.0 }) // fully zoomed in
            .add_plugins(LodPlugin);
 
         let entity = app.world_mut().spawn((
