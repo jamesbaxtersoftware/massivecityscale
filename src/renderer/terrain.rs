@@ -4,40 +4,57 @@ use crate::theme::Theme;
 use crate::lod::LodRange;
 use crate::renderer::scale_consts::*;
 
-pub fn spawn_ocean(
+pub fn spawn_planet_sphere(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     theme: Res<Theme>,
 ) {
-    // Large flat plane covering the whole planet surface (640 km) plus margin
-    let mesh = meshes.add(Plane3d::default().mesh().size(700.0, 700.0)); // 640 km world + 30 km margin each side
+    // Radius 350 km, centre at Y=-350 → top at Y=0 (ground level). Camera is outside the sphere.
+    let mesh = meshes.add(Sphere::new(SPHERE_RADIUS).mesh().uv(64, 36));
     let material = materials.add(StandardMaterial {
-        base_color: theme.terrain.water,
+        base_color: theme.terrain.water, // ocean base — continent patches render on top
         ..default()
     });
     commands.spawn((
         Mesh3d(mesh),
         MeshMaterial3d(material),
-        Transform::from_xyz(0.0, -0.01, 0.0), // just below origin so continent patches render on top
-        LodRange { min_scale: LOD_OCEAN.0, max_scale: LOD_OCEAN.1 },
-        Visibility::Visible,
+        Transform::from_xyz(0.0, SPHERE_CENTER_Y, 0.0),
+        LodRange { min_scale: LOD_PLANET.0, max_scale: LOD_PLANET.1 },
+        Visibility::Hidden,
     ));
 }
 
-pub fn spawn_continent_patches(
+pub fn spawn_sphere_continents(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     world: Res<WorldData>,
     theme: Res<Theme>,
 ) {
+    let sphere_center = Vec3::new(0.0, SPHERE_CENTER_Y, 0.0);
+
     for continent in &world.planet.continents {
         for (cx, cz) in &continent.cells {
-            // Each grid cell is CELL_KM × CELL_KM km; offset to centre at origin
             let x = *cx as f32 * CELL_KM - WORLD_HALF_KM + CELL_KM / 2.0;
             let z = *cz as f32 * CELL_KM - WORLD_HALF_KM + CELL_KM / 2.0;
-            let mesh = meshes.add(Cuboid::new(CELL_KM, 0.02, CELL_KM)); // 0.02 km (20 m) thin slab
+
+            let flat_dist_sq = x * x + z * z;
+            if flat_dist_sq >= SPHERE_RADIUS * SPHERE_RADIUS {
+                continue; // corner cells beyond sphere footprint — skip
+            }
+
+            // Project flat (x, z) up onto the top hemisphere surface
+            let y_sphere = SPHERE_CENTER_Y + (SPHERE_RADIUS * SPHERE_RADIUS - flat_dist_sq).sqrt();
+            let surface_point = Vec3::new(x, y_sphere, z);
+            let normal = (surface_point - sphere_center).normalize();
+
+            // Rotate patch so its local Y aligns with the outward sphere normal
+            let rotation = Quat::from_rotation_arc(Vec3::Y, normal);
+            // Push 1 km above surface so patch sits visibly on top of sphere
+            let position = surface_point + normal * 1.0;
+
+            let mesh = meshes.add(Cuboid::new(CELL_KM * 0.9, 2.0, CELL_KM * 0.9));
             let material = materials.add(StandardMaterial {
                 base_color: theme.terrain.land_continent,
                 ..default()
@@ -45,31 +62,10 @@ pub fn spawn_continent_patches(
             commands.spawn((
                 Mesh3d(mesh),
                 MeshMaterial3d(material),
-                Transform::from_xyz(x, 0.01, z), // 0.01 km above ocean so it's visible on top
-                LodRange { min_scale: LOD_CONTINENTS.0, max_scale: LOD_CONTINENTS.1 },
+                Transform { translation: position, rotation, scale: Vec3::ONE },
+                LodRange { min_scale: LOD_SPHERE_CONTINENTS.0, max_scale: LOD_SPHERE_CONTINENTS.1 },
                 Visibility::Hidden,
             ));
         }
     }
-}
-
-pub fn spawn_planet_sphere(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    theme: Res<Theme>,
-) {
-    // Sphere radius slightly larger than WORLD_HALF_KM so it peeks around the flat map
-    let mesh = meshes.add(Sphere::new(350.0).mesh().uv(32, 18)); // 350 km: slightly larger than WORLD_HALF_KM (320) so sphere peeks past the flat map edges
-    let material = materials.add(StandardMaterial {
-        base_color: theme.solar.planet,
-        ..default()
-    });
-    commands.spawn((
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        Transform::from_xyz(0.0, -30.0, 0.0), // centred 30 km below surface so sphere curvature is visible at zoom-out
-        LodRange { min_scale: LOD_PLANET.0, max_scale: LOD_PLANET.1 },
-        Visibility::Hidden,
-    ));
 }

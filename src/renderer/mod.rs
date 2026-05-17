@@ -3,20 +3,22 @@ pub mod buildings;
 pub mod terrain;
 pub mod solar;
 
-use bevy::prelude::*;
+use bevy::ecs::schedule::IntoSystemConfigs;
+use bevy::prelude::App;
+use bevy::prelude::Plugin;
+use bevy::prelude::Startup;
 
 pub struct RendererPlugin;
 
 impl Plugin for RendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (
-            terrain::spawn_ocean,
+            terrain::spawn_planet_sphere,   // Theme-only; runs first so WorldData is ready for building spawners
+            solar::spawn_solar_system,
             buildings::spawn_street_buildings,
             buildings::spawn_block_level,
             buildings::spawn_city_level,
-            terrain::spawn_continent_patches,
-            terrain::spawn_planet_sphere,
-            solar::spawn_solar_system,
+            terrain::spawn_sphere_continents,
         ).chain());
     }
 }

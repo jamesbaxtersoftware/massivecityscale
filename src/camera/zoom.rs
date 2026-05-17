@@ -2,10 +2,12 @@ use bevy::prelude::*;
 use bevy::input::mouse::{MouseWheel, MouseMotion};
 
 pub const ZOOM_SPEED: f32 = 0.05;
+pub const KEYBOARD_ZOOM_SPEED: f32 = 0.01; // per-frame step when Up/Down held
 pub const ZOOM_MIN: f32 = 0.0;
 pub const ZOOM_MAX: f32 = 1.0;
 pub const ZOOM_EXPONENT: f32 = 4.2; // maps zoom [0,1] to ortho_scale [0.001, ~16]: 10^(0*4.2)=1, 10^(1*4.2)≈15849
-pub const PAN_SPEED: f32 = 0.5;
+pub const ORBIT_SPEED: f32 = 0.006;
+const ORBIT_PIVOT_Y: f32 = -350.0; // sphere center — matches SPHERE_CENTER_Y in scale_consts
 
 #[derive(Resource, Debug, Clone)]
 pub struct ZoomLevel {
@@ -41,25 +43,53 @@ pub fn handle_scroll(
     }
 }
 
-pub fn handle_pan(
+pub fn handle_keyboard_zoom(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut zoom: ResMut<ZoomLevel>,
+    mut proj_query: Query<&mut Projection, With<Camera3d>>,
+) {
+    let delta = if keys.pressed(KeyCode::ArrowDown) {
+        KEYBOARD_ZOOM_SPEED   // zoom out
+    } else if keys.pressed(KeyCode::ArrowUp) {
+        -KEYBOARD_ZOOM_SPEED  // zoom in
+    } else {
+        return;
+    };
+    zoom.value = (zoom.value + delta).clamp(ZOOM_MIN, ZOOM_MAX);
+    if let Ok(mut proj) = proj_query.get_single_mut() {
+        if let Projection::Orthographic(ref mut ortho) = *proj {
+            ortho.scale = zoom.to_ortho_scale();
+        }
+    }
+}
+
+pub fn handle_orbit(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut motion: EventReader<MouseMotion>,
     mut cam_query: Query<&mut Transform, With<Camera3d>>,
-    zoom: Res<ZoomLevel>,
 ) {
     if !mouse_buttons.pressed(MouseButton::Left) {
         motion.clear();
         return;
     }
-    let scale = zoom.to_ortho_scale();
+    let pivot = Vec3::new(0.0, ORBIT_PIVOT_Y, 0.0);
     for ev in motion.read() {
         if let Ok(mut transform) = cam_query.get_single_mut() {
+            let offset = transform.translation - pivot;
             let right = transform.right().as_vec3();
-            // Project camera-up onto XZ plane so pan stays horizontal (no vertical drift)
-            let cam_up = transform.up().as_vec3();
-            let screen_up_xz = Vec3::new(cam_up.x, 0.0, cam_up.z).normalize_or_zero();
-            transform.translation -= right * ev.delta.x * scale * PAN_SPEED;
-            transform.translation += screen_up_xz * ev.delta.y * scale * PAN_SPEED;
+            // Horizontal drag → yaw around world Y; vertical → pitch around camera right
+            let yaw = Quat::from_rotation_y(-ev.delta.x * ORBIT_SPEED);
+            let pitch = Quat::from_axis_angle(right, -ev.delta.y * ORBIT_SPEED);
+            let after_yaw = yaw * offset;
+            let after_both = pitch * after_yaw;
+            // Clamp elevation: skip pitch if it would flip past a pole
+            let new_offset = if after_both.normalize().y.abs() < 0.98 {
+                after_both
+            } else {
+                after_yaw
+            };
+            transform.translation = pivot + new_offset;
+            transform.look_at(pivot, Vec3::Y);
         }
     }
 }

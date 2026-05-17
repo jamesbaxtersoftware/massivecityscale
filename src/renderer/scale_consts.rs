@@ -12,7 +12,9 @@ pub const BLDG_H_SCALE: f32 = 0.05;
 pub const LOD_BUILDINGS: (f32, f32) = (0.0, 0.030);
 pub const LOD_BLOCKS: (f32, f32) = (0.005, 0.20);
 pub const LOD_CITIES: (f32, f32) = (0.05, 1.2);
-pub const LOD_OCEAN: (f32, f32) = (0.0, 4.0);
-pub const LOD_CONTINENTS: (f32, f32) = (0.04, 4.0);
-pub const LOD_PLANET: (f32, f32) = (0.8, 20.0);
+pub const SPHERE_CENTER_Y: f32 = -350.0; // sphere top = Y 0 (ground level), camera outside sphere
+pub const SPHERE_RADIUS: f32 = 350.0;
+
+pub const LOD_PLANET: (f32, f32) = (0.0, 20.0);            // sphere always visible — it is the world
+pub const LOD_SPHERE_CONTINENTS: (f32, f32) = (0.0, 20.0); // continent patches always visible
 pub const LOD_SOLAR: (f32, f32) = (3.0, 20.0);

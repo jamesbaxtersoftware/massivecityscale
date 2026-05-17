@@ -5,6 +5,20 @@ use crate::theme::Theme;
 use crate::lod::LodRange;
 use crate::renderer::scale_consts::*;
 
+fn project_to_sphere(x: f32, z: f32, height_offset: f32) -> Option<(Vec3, Quat)> {
+    let flat_dist_sq = x * x + z * z;
+    if flat_dist_sq >= SPHERE_RADIUS * SPHERE_RADIUS {
+        return None;
+    }
+    let sphere_center = Vec3::new(0.0, SPHERE_CENTER_Y, 0.0);
+    let y_sphere = SPHERE_CENTER_Y + (SPHERE_RADIUS * SPHERE_RADIUS - flat_dist_sq).sqrt();
+    let surface_point = Vec3::new(x, y_sphere, z);
+    let normal = (surface_point - sphere_center).normalize();
+    let rotation = Quat::from_rotation_arc(Vec3::Y, normal);
+    let position = surface_point + normal * height_offset;
+    Some((position, rotation))
+}
+
 fn city_km(city: &CityData) -> (f32, f32) {
     (
         city.lat * CELL_KM - WORLD_HALF_KM,
@@ -12,12 +26,12 @@ fn city_km(city: &CityData) -> (f32, f32) {
     )
 }
 
-fn building_world_pos(
+fn building_world_xz(
     city: &CityData,
     district: &DistrictData,
     block: &BlockData,
     building: &BuildingData,
-) -> Vec3 {
+) -> (f32, f32) {
     let (cx, cz) = city_km(city);
     let dx = (district.x - city.lat) / 3.0 * DIST_SCALE;
     let dz = (district.z - city.lon) / 3.0 * DIST_SCALE;
@@ -25,17 +39,16 @@ fn building_world_pos(
     let bz = (block.z - district.z) * BLOCK_SCALE;
     let ox = (building.x - block.x) * BLDG_POS_SCALE;
     let oz = (building.z - block.z) * BLDG_POS_SCALE;
-    let h = building.height * BLDG_H_SCALE;
-    Vec3::new(cx + dx + bx + ox, h / 2.0, cz + dz + bz + oz)
+    (cx + dx + bx + ox, cz + dz + bz + oz)
 }
 
-fn block_world_pos(city: &CityData, district: &DistrictData, block: &BlockData) -> Vec3 {
+fn block_world_xz(city: &CityData, district: &DistrictData, block: &BlockData) -> (f32, f32) {
     let (cx, cz) = city_km(city);
     let dx = (district.x - city.lat) / 3.0 * DIST_SCALE;
     let dz = (district.z - city.lon) / 3.0 * DIST_SCALE;
     let bx = (block.x - district.x) * BLOCK_SCALE;
     let bz = (block.z - district.z) * BLOCK_SCALE;
-    Vec3::new(cx + dx + bx, 0.0, cz + dz + bz) // Y adjusted by caller after averaging block height
+    (cx + dx + bx, cz + dz + bz)
 }
 
 pub fn spawn_street_buildings(
@@ -57,15 +70,16 @@ pub fn spawn_street_buildings(
                     let w = building.width * BLDG_W_SCALE;
                     let h = building.height * BLDG_H_SCALE;
                     let d = building.depth * BLDG_W_SCALE;
+                    let (bx, bz) = building_world_xz(city, district, block, building);
+                    let Some((translation, rotation)) = project_to_sphere(bx, bz, h / 2.0) else { continue };
                     let mesh = meshes.add(Cuboid::new(w, h, d));
                     let material = materials.add(StandardMaterial { base_color: color, ..default() });
-                    let pos = building_world_pos(city, district, block, building);
                     commands.spawn((
                         Mesh3d(mesh),
                         MeshMaterial3d(material),
-                        Transform::from_translation(pos),
+                        Transform { translation, rotation, scale: Vec3::ONE },
                         LodRange { min_scale: LOD_BUILDINGS.0, max_scale: LOD_BUILDINGS.1 },
-                        Visibility::Hidden, // LodPlugin manages visibility each frame
+                        Visibility::Hidden,
                     ));
                 }
             }
@@ -90,18 +104,17 @@ pub fn spawn_block_level(
                         / block.buildings.len() as f32
                 };
                 let box_height = avg_height * BLDG_H_SCALE;
-                let mut pos = block_world_pos(city, district, block);
-                pos.y = box_height / 2.0;
+                let (bx, bz) = block_world_xz(city, district, block);
+                let Some((translation, rotation)) = project_to_sphere(bx, bz, box_height / 2.0) else { continue };
                 let mesh = meshes.add(Cuboid::new(BLOCK_SCALE * 0.85, box_height, BLOCK_SCALE * 0.85)); // 0.85: gap between adjacent blocks
                 let material = materials.add(StandardMaterial {
-                    // Block level uses uniform color; individual height variation averages out
                     base_color: theme.buildings.residential,
                     ..default()
                 });
                 commands.spawn((
                     Mesh3d(mesh),
                     MeshMaterial3d(material),
-                    Transform::from_translation(pos),
+                    Transform { translation, rotation, scale: Vec3::ONE },
                     LodRange { min_scale: LOD_BLOCKS.0, max_scale: LOD_BLOCKS.1 },
                     Visibility::Hidden,
                 ));
@@ -122,16 +135,18 @@ pub fn spawn_city_level(
 
     for city in &world.cities {
         let (cx, cz) = city_km(city);
+        let x = cx + city_size / 2.0;
+        let z = cz + city_size / 2.0;
+        let Some((translation, rotation)) = project_to_sphere(x, z, 0.025) else { continue };
         let mesh = meshes.add(Cuboid::new(city_size, 0.05, city_size));
         let material = materials.add(StandardMaterial {
             base_color: theme.buildings.commercial,
             ..default()
         });
-        // Centre the blob over the city's content area
         commands.spawn((
             Mesh3d(mesh),
             MeshMaterial3d(material),
-            Transform::from_xyz(cx + city_size / 2.0, 0.025, cz + city_size / 2.0),
+            Transform { translation, rotation, scale: Vec3::ONE },
             LodRange { min_scale: LOD_CITIES.0, max_scale: LOD_CITIES.1 },
             Visibility::Hidden,
         ));
