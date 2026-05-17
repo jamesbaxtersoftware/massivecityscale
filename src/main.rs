@@ -2,6 +2,7 @@ mod world_gen;
 mod theme;
 mod camera;
 mod scale;
+mod lod;
 mod renderer;
 
 use bevy::prelude::*;
