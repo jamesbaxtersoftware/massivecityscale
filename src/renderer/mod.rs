@@ -1,3 +1,4 @@
+pub mod scale_consts;
 pub mod buildings;
 pub mod terrain;
 pub mod solar;
