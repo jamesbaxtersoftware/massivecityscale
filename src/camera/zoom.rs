@@ -13,14 +13,14 @@ pub struct ZoomLevel {
 
 impl Default for ZoomLevel {
     fn default() -> Self {
-        Self { value: 0.4 }
+        Self { value: 0.1 }
     }
 }
 
 impl ZoomLevel {
     pub fn to_ortho_scale(&self) -> f32 {
-        // Exponential: 1.0 at street (0.0) to 100_000.0 at solar (1.0)
-        (10.0f32).powf(self.value * 5.0)
+        // 0.05 at street (20px per world unit), 5.0 at solar (~1600 units visible)
+        0.05 * (10.0f32).powf(self.value * 2.0)
     }
 }
 

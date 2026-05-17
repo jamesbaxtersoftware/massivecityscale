@@ -37,9 +37,9 @@ pub fn spawn_street_buildings(
                         Mesh3d(mesh),
                         MeshMaterial3d(material),
                         Transform::from_xyz(
-                            building.x,
+                            building.x - 32.0,
                             building.height / 2.0,
-                            building.z,
+                            building.z - 32.0,
                         ),
                     )).set_parent(parent);
                 }
@@ -81,7 +81,7 @@ pub fn spawn_block_level(
                 commands.spawn((
                     Mesh3d(mesh),
                     MeshMaterial3d(material),
-                    Transform::from_xyz(block.x, box_height / 2.0, block.z),
+                    Transform::from_xyz(block.x - 32.0, box_height / 2.0, block.z - 32.0),
                 )).set_parent(parent);
             }
         }
