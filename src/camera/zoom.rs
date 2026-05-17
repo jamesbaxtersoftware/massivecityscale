@@ -53,9 +53,11 @@ pub fn handle_pan(
     for ev in motion.read() {
         if let Ok(mut transform) = cam_query.get_single_mut() {
             let right = transform.right().as_vec3();
-            let up = transform.up().as_vec3();
-            transform.translation -= right * ev.delta.x * PAN_SPEED * scale * 0.001;
-            transform.translation += up * ev.delta.y * PAN_SPEED * scale * 0.001;
+            // Project camera-up onto XZ plane so pan stays horizontal (no vertical drift)
+            let cam_up = transform.up().as_vec3();
+            let screen_up_xz = Vec3::new(cam_up.x, 0.0, cam_up.z).normalize_or_zero();
+            transform.translation -= right * ev.delta.x * scale * PAN_SPEED;
+            transform.translation += screen_up_xz * ev.delta.y * scale * PAN_SPEED;
         }
     }
 }
