@@ -13,11 +13,10 @@ pub struct RendererPlugin;
 impl Plugin for RendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (
-            terrain::spawn_planet_sphere,   // Theme-only; runs first so WorldData is ready for building spawners
+            terrain::spawn_planet_sphere,
             solar::spawn_solar_system,
+            buildings::spawn_city_towers,
             buildings::spawn_street_buildings,
-            buildings::spawn_block_level,
-            buildings::spawn_city_level,
             terrain::spawn_sphere_continents,
         ).chain());
     }

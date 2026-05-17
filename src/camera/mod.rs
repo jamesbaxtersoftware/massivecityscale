@@ -8,8 +8,9 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(ZoomLevel::default())
+           .insert_resource(zoom::DoubleClickState::default())
            .add_systems(Startup, spawn_camera)
-           .add_systems(Update, (zoom::handle_scroll, zoom::handle_keyboard_zoom, zoom::handle_orbit));
+           .add_systems(Update, (zoom::handle_scroll, zoom::handle_double_click_zoom, zoom::handle_keyboard_orbit, zoom::handle_orbit));
     }
 }
 
