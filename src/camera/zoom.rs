@@ -4,6 +4,7 @@ use bevy::input::mouse::{MouseWheel, MouseMotion};
 pub const ZOOM_SPEED: f32 = 0.05;
 pub const ZOOM_MIN: f32 = 0.0;
 pub const ZOOM_MAX: f32 = 1.0;
+pub const ZOOM_EXPONENT: f32 = 4.2; // maps zoom [0,1] to ortho_scale [0.001, ~16]: 10^(0*4.2)=1, 10^(1*4.2)≈15849
 pub const PAN_SPEED: f32 = 0.5;
 
 #[derive(Resource, Debug, Clone)]
@@ -14,7 +15,7 @@ pub struct ZoomLevel {
 impl ZoomLevel {
     pub fn to_ortho_scale(&self) -> f32 {
         // 0.001 at street (zoom 0) → ~16 at solar system (zoom 1)
-        0.001 * (10.0f32).powf(self.value * 4.2)
+        0.001 * (10.0f32).powf(self.value * ZOOM_EXPONENT)
     }
 }
 
