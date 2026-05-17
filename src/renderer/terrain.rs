@@ -3,17 +3,19 @@ use crate::world_gen::WorldData;
 use crate::theme::Theme;
 use crate::lod::LodRange;
 use crate::renderer::scale_consts::*;
+use crate::renderer::PlanetRootEntity;
 
 pub fn spawn_planet_sphere(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     theme: Res<Theme>,
+    root: Res<PlanetRootEntity>,
 ) {
     // Radius 350 km, centre at Y=-350 → top at Y=0 (ground level). Camera is outside the sphere.
     let mesh = meshes.add(Sphere::new(SPHERE_RADIUS).mesh().uv(64, 36));
     let material = materials.add(StandardMaterial {
-        base_color: theme.terrain.water, // ocean base — continent patches render on top
+        base_color: theme.terrain.water,
         ..default()
     });
     commands.spawn((
@@ -22,7 +24,7 @@ pub fn spawn_planet_sphere(
         Transform::from_xyz(0.0, SPHERE_CENTER_Y, 0.0),
         LodRange { min_scale: LOD_PLANET.0, max_scale: LOD_PLANET.1 },
         Visibility::Hidden,
-    ));
+    )).set_parent(root.0);
 }
 
 pub fn spawn_sphere_continents(
@@ -31,6 +33,7 @@ pub fn spawn_sphere_continents(
     mut materials: ResMut<Assets<StandardMaterial>>,
     world: Res<WorldData>,
     theme: Res<Theme>,
+    root: Res<PlanetRootEntity>,
 ) {
     let sphere_center = Vec3::new(0.0, SPHERE_CENTER_Y, 0.0);
 
@@ -41,17 +44,13 @@ pub fn spawn_sphere_continents(
 
             let flat_dist_sq = x * x + z * z;
             if flat_dist_sq >= SPHERE_RADIUS * SPHERE_RADIUS {
-                continue; // corner cells beyond sphere footprint — skip
+                continue;
             }
 
-            // Project flat (x, z) up onto the top hemisphere surface
             let y_sphere = SPHERE_CENTER_Y + (SPHERE_RADIUS * SPHERE_RADIUS - flat_dist_sq).sqrt();
             let surface_point = Vec3::new(x, y_sphere, z);
             let normal = (surface_point - sphere_center).normalize();
-
-            // Rotate patch so its local Y aligns with the outward sphere normal
             let rotation = Quat::from_rotation_arc(Vec3::Y, normal);
-            // Push 1 km above surface so patch sits visibly on top of sphere
             let position = surface_point + normal * 1.0;
 
             let mesh = meshes.add(Cuboid::new(CELL_KM * 0.9, 2.0, CELL_KM * 0.9));
@@ -65,7 +64,7 @@ pub fn spawn_sphere_continents(
                 Transform { translation: position, rotation, scale: Vec3::ONE },
                 LodRange { min_scale: LOD_SPHERE_CONTINENTS.0, max_scale: LOD_SPHERE_CONTINENTS.1 },
                 Visibility::Hidden,
-            ));
+            )).set_parent(root.0);
         }
     }
 }

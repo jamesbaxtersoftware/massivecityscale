@@ -3,6 +3,7 @@ use crate::world_gen::{WorldData, city::{CityData, DistrictData, BlockData, Buil
 use crate::theme::Theme;
 use crate::lod::LodRange;
 use crate::renderer::scale_consts::*;
+use crate::renderer::PlanetRootEntity;
 
 fn project_to_sphere(x: f32, z: f32, height_offset: f32) -> Option<(Vec3, Quat)> {
     let flat_dist_sq = x * x + z * z;
@@ -48,6 +49,7 @@ pub fn spawn_city_towers(
     mut materials: ResMut<Assets<StandardMaterial>>,
     world: Res<WorldData>,
     theme: Res<Theme>,
+    root: Res<PlanetRootEntity>,
 ) {
     // One tall building-shaped tower per city — visible from globe, looks like a skyscraper marker
     let width = 3.0_f32;  // km
@@ -66,7 +68,7 @@ pub fn spawn_city_towers(
             Transform { translation, rotation, scale: Vec3::ONE },
             LodRange { min_scale: LOD_BUILDINGS.0, max_scale: LOD_BUILDINGS.1 },
             Visibility::Hidden,
-        ));
+        )).set_parent(root.0);
     }
 }
 
@@ -76,6 +78,7 @@ pub fn spawn_street_buildings(
     mut materials: ResMut<Assets<StandardMaterial>>,
     world: Res<WorldData>,
     theme: Res<Theme>,
+    root: Res<PlanetRootEntity>,
 ) {
     for city in &world.cities {
         for district in &city.districts {
@@ -99,7 +102,7 @@ pub fn spawn_street_buildings(
                         Transform { translation, rotation, scale: Vec3::ONE },
                         LodRange { min_scale: LOD_BUILDINGS.0, max_scale: LOD_BUILDINGS.1 },
                         Visibility::Hidden,
-                    ));
+                    )).set_parent(root.0);
                 }
             }
         }
