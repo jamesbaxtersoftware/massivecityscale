@@ -1,7 +1,6 @@
 mod world_gen;
 mod theme;
 mod camera;
-mod scale;
 mod lod;
 mod renderer;
 
@@ -9,7 +8,7 @@ use bevy::prelude::*;
 use world_gen::WorldGenPlugin;
 use theme::ThemePlugin;
 use camera::CameraPlugin;
-use scale::ScalePlugin;
+use lod::LodPlugin;
 use renderer::RendererPlugin;
 
 fn main() {
@@ -26,7 +25,7 @@ fn main() {
         .add_plugins(WorldGenPlugin)
         .add_plugins(ThemePlugin)
         .add_plugins(CameraPlugin)
-        .add_plugins(ScalePlugin)
+        .add_plugins(LodPlugin)
         .add_plugins(RendererPlugin)
         .add_systems(Startup, spawn_light)
         .add_systems(Update, quit_on_escape)

@@ -10,10 +10,10 @@ pub struct RendererPlugin;
 impl Plugin for RendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (
+            terrain::spawn_ocean,
             buildings::spawn_street_buildings,
             buildings::spawn_block_level,
             buildings::spawn_city_level,
-            terrain::spawn_ocean,
             terrain::spawn_continent_patches,
             terrain::spawn_planet_sphere,
             solar::spawn_solar_system,
@@ -25,7 +25,7 @@ impl Plugin for RendererPlugin {
 mod tests {
     use super::*;
     use bevy::prelude::*;
-    use crate::{world_gen::WorldGenPlugin, theme::ThemePlugin, camera::CameraPlugin, scale::ScalePlugin};
+    use crate::{world_gen::WorldGenPlugin, theme::ThemePlugin, camera::CameraPlugin, lod::LodPlugin};
 
     #[test]
     fn renderer_plugin_spawns_mesh_entities() {
@@ -39,7 +39,7 @@ mod tests {
            .add_plugins(WorldGenPlugin)
            .add_plugins(ThemePlugin)
            .add_plugins(CameraPlugin)
-           .add_plugins(ScalePlugin)
+           .add_plugins(LodPlugin)
            .add_plugins(RendererPlugin);
         app.update();
         let mesh_count = app.world_mut()
