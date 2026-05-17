@@ -11,16 +11,17 @@ pub struct ZoomLevel {
     pub value: f32,
 }
 
-impl Default for ZoomLevel {
-    fn default() -> Self {
-        Self { value: 0.1 }
+impl ZoomLevel {
+    pub fn to_ortho_scale(&self) -> f32 {
+        // 0.001 at street (zoom 0) → ~16 at solar system (zoom 1)
+        0.001 * (10.0f32).powf(self.value * 4.2)
     }
 }
 
-impl ZoomLevel {
-    pub fn to_ortho_scale(&self) -> f32 {
-        // 0.05 at street (20px per world unit), 5.0 at solar (~1600 units visible)
-        0.05 * (10.0f32).powf(self.value * 2.0)
+impl Default for ZoomLevel {
+    fn default() -> Self {
+        // zoom 0.45 → scale ≈ 0.078 → see ~100 km → city blobs visible on startup
+        Self { value: 0.45 }
     }
 }
 
@@ -69,10 +70,8 @@ mod tests {
     #[test]
     fn zoom_clamps_to_range() {
         let mut zoom = ZoomLevel { value: 0.0 };
-        // simulate scrolling way out
         zoom.value = (zoom.value - 100.0 * ZOOM_SPEED).clamp(ZOOM_MIN, ZOOM_MAX);
         assert_eq!(zoom.value, ZOOM_MIN);
-        // simulate scrolling way in
         zoom.value = (zoom.value + 100.0 * ZOOM_SPEED).clamp(ZOOM_MIN, ZOOM_MAX);
         assert_eq!(zoom.value, ZOOM_MAX);
     }
@@ -82,6 +81,21 @@ mod tests {
         let street = ZoomLevel { value: 0.0 };
         let solar = ZoomLevel { value: 1.0 };
         assert!(street.to_ortho_scale() < solar.to_ortho_scale());
+    }
+
+    #[test]
+    fn street_scale_shows_buildings() {
+        // At zoom 0, scale = 0.001, total view = 1.28 km.
+        // Buildings at 25–50 m (0.025–0.050 km) → 25–50 px wide. Visible.
+        let street = ZoomLevel { value: 0.0 };
+        assert!(street.to_ortho_scale() < 0.01, "street ortho_scale should be < 0.01 to show buildings");
+    }
+
+    #[test]
+    fn solar_scale_sees_solar_system() {
+        // At zoom 1, scale ≈ 16, total view ≈ 20 000 km. Solar system (±5000 km) fits.
+        let solar = ZoomLevel { value: 1.0 };
+        assert!(solar.to_ortho_scale() > 5.0, "solar ortho_scale should be > 5.0 to see solar system");
     }
 
     #[test]
