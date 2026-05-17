@@ -10,11 +10,10 @@ pub struct RendererPlugin;
 impl Plugin for RendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (
-            terrain::spawn_ground,
             buildings::spawn_street_buildings,
             buildings::spawn_block_level,
             buildings::spawn_city_level,
-            terrain::spawn_water_plane,
+            terrain::spawn_ocean,
             terrain::spawn_continent_patches,
             terrain::spawn_planet_sphere,
             solar::spawn_solar_system,
