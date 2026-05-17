@@ -1,0 +1,98 @@
+<h2>What camera perspective?</h2>
+<p class="subtitle">This shapes the whole visual feel of the world</p>
+
+<div class="cards">
+  <div class="card" data-choice="isometric" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d1117;padding:20px;font-family:monospace;min-height:160px;display:flex;align-items:center;justify-content:center;">
+      <svg width="220" height="140" viewBox="0 0 220 140">
+        <!-- isometric grid -->
+        <g stroke="#2a3f2a" stroke-width="0.5" opacity="0.6">
+          <!-- horizontal lines angled right -->
+          <line x1="10" y1="100" x2="110" y2="50"/><line x1="30" y1="110" x2="130" y2="60"/>
+          <line x1="50" y1="120" x2="150" y2="70"/><line x1="70" y1="130" x2="170" y2="80"/>
+          <!-- horizontal lines angled left -->
+          <line x1="110" y1="50" x2="210" y2="100"/><line x1="90" y1="40" x2="190" y2="90"/>
+          <line x1="70" y1="30" x2="170" y2="80"/><line x1="50" y1="20" x2="150" y2="70"/>
+        </g>
+        <!-- isometric buildings (boxes) -->
+        <g>
+          <!-- tall building center -->
+          <polygon points="110,30 140,47 140,90 110,73" fill="#7c6e8a"/>
+          <polygon points="80,47 110,30 110,73 80,90" fill="#5a4f6a"/>
+          <polygon points="80,47 110,30 140,47 110,64" fill="#9d8fa8"/>
+          <!-- small building left -->
+          <polygon points="60,75 80,64 80,84 60,95" fill="#4a6b4a"/>
+          <polygon points="45,83 60,75 60,95 45,103" fill="#3a5a3a"/>
+          <polygon points="45,83 60,75 80,64 65,72" fill="#5a8a5a"/>
+          <!-- small building right -->
+          <polygon points="140,64 160,53 160,73 140,84" fill="#6b4a4a"/>
+          <polygon points="160,53 180,64 180,84 160,73" fill="#5a3a3a"/>
+          <polygon points="140,64 160,53 180,64 160,75" fill="#8a5a5a"/>
+        </g>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>A — Isometric</h3>
+      <p>Fixed 45° angle, no perspective distortion. Like the screenshot you shared. Clean, readable at all scales.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="perspective3d" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d1117;padding:20px;font-family:monospace;min-height:160px;display:flex;align-items:center;justify-content:center;">
+      <svg width="220" height="140" viewBox="0 0 220 140">
+        <!-- perspective grid -->
+        <g stroke="#2a3f2a" stroke-width="0.5" opacity="0.6">
+          <line x1="110" y1="50" x2="20" y2="130"/><line x1="110" y1="50" x2="60" y2="130"/>
+          <line x1="110" y1="50" x2="100" y2="130"/><line x1="110" y1="50" x2="140" y2="130"/>
+          <line x1="110" y1="50" x2="180" y2="130"/><line x1="110" y1="50" x2="200" y2="130"/>
+          <line x1="40" y1="105" x2="185" y2="105"/><line x1="30" y1="118" x2="195" y2="118"/>
+          <line x1="25" y1="128" x2="200" y2="128"/>
+        </g>
+        <!-- perspective buildings -->
+        <g>
+          <!-- center tall -->
+          <polygon points="100,40 120,40 125,95 95,95" fill="#7c6e8a"/>
+          <polygon points="120,40 130,45 135,95 125,95" fill="#5a4f6a"/>
+          <polygon points="100,40 120,40 130,45 110,45" fill="#9d8fa8"/>
+          <!-- left shorter -->
+          <polygon points="60,65 75,65 78,95 57,95" fill="#4a6b4a"/>
+          <polygon points="75,65 82,68 85,95 78,95" fill="#3a5a3a"/>
+          <polygon points="60,65 75,65 82,68 67,68" fill="#5a8a5a"/>
+          <!-- right shorter -->
+          <polygon points="140,60 155,60 158,95 137,95" fill="#6b4a4a"/>
+          <polygon points="155,60 165,64 168,95 158,95" fill="#5a3a3a"/>
+          <polygon points="140,60 155,60 165,64 150,64" fill="#8a5a5a"/>
+        </g>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>B — 3D Perspective</h3>
+      <p>Free camera with tilt and zoom. More immersive street-level views. Camera tilts flatter as you zoom out.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="topdown" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d1117;padding:20px;font-family:monospace;min-height:160px;display:flex;align-items:center;justify-content:center;">
+      <svg width="220" height="140" viewBox="0 0 220 140">
+        <!-- top-down grid -->
+        <g stroke="#2a3f2a" stroke-width="0.5" opacity="0.6">
+          <line x1="10" y1="35" x2="210" y2="35"/><line x1="10" y1="70" x2="210" y2="70"/>
+          <line x1="10" y1="105" x2="210" y2="105"/>
+          <line x1="45" y1="10" x2="45" y2="130"/><line x1="90" y1="10" x2="90" y2="130"/>
+          <line x1="135" y1="10" x2="135" y2="130"/><line x1="180" y1="10" x2="180" y2="130"/>
+        </g>
+        <!-- top-down blocks -->
+        <rect x="50" y="40" width="35" height="25" fill="#7c6e8a" rx="1"/>
+        <rect x="95" y="15" width="35" height="50" fill="#5a4f6a" rx="1"/>
+        <rect x="50" y="75" width="15" height="25" fill="#4a6b4a" rx="1"/>
+        <rect x="140" y="40" width="35" height="20" fill="#6b4a4a" rx="1"/>
+        <rect x="140" y="75" width="20" height="25" fill="#9d8fa8" rx="1"/>
+        <rect x="15" y="40" width="20" height="15" fill="#6b6b4a" rx="1"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>C — Top-Down 2D</h3>
+      <p>Pure overhead view. Simpler to render. Great for zoomed-out city/country/world views. Less impressive at street level.</p>
+    </div>
+  </div>
+</div>

@@ -107,7 +107,7 @@ pub fn spawn_planet_sphere(
 
     let mesh = meshes.add(Sphere::new(40.0).mesh().uv(32, 18));
     let material = materials.add(StandardMaterial {
-        base_color: theme.terrain.water,
+        base_color: theme.solar.planet,
         ..default()
     });
     commands.spawn((

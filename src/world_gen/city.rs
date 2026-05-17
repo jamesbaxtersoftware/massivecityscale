@@ -7,6 +7,7 @@ pub struct BuildingData {
     pub height: f32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct RoadData {
     pub x: f32,
@@ -23,6 +24,7 @@ pub struct BlockData {
     pub roads: Vec<RoadData>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct DistrictData {
     pub x: f32,
@@ -93,7 +95,7 @@ fn generate_districts(rng: &mut ChaCha8Rng, city_lat: f32, city_lon: f32) -> Vec
     districts
 }
 
-fn generate_blocks(rng: &mut ChaCha8Rng, district_x: f32, district_z: f32) -> Vec<BlockData> {
+fn generate_blocks(_rng: &mut ChaCha8Rng, district_x: f32, district_z: f32) -> Vec<BlockData> {
     let mut blocks = Vec::new();
     let side = (BLOCKS_PER_DISTRICT as f32).sqrt() as i32;
     for bx in 0..side {

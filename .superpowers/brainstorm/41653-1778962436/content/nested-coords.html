@@ -1,0 +1,97 @@
+<h2>Nested Coordinate Spaces</h2>
+<p class="subtitle">Each scale level is a world within a world — like Russian dolls</p>
+
+<div class="section">
+  <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+
+    <!-- Diagram -->
+    <div style="flex:1;min-width:280px;">
+      <svg width="100%" viewBox="0 0 340 300" style="max-width:380px;">
+        <!-- Solar system space -->
+        <rect x="2" y="2" width="336" height="296" rx="6" fill="#0a0a14" stroke="#2a2a4a" stroke-width="1.5"/>
+        <text x="12" y="18" fill="#4a4a8a" font-size="9" font-family="monospace">SOLAR SYSTEM SPACE</text>
+        <!-- Sun -->
+        <circle cx="50" cy="150" r="18" fill="#f59e0b" opacity="0.8"/>
+        <text x="34" y="178" fill="#92400e" font-size="7" font-family="monospace">sun (0,0)</text>
+        <!-- Planet orbit line -->
+        <ellipse cx="50" cy="150" rx="120" ry="40" fill="none" stroke="#1e1e3a" stroke-width="0.8" stroke-dasharray="3,3"/>
+
+        <!-- Planet space -->
+        <rect x="135" y="100" width="140" height="100" rx="5" fill="#0a1020" stroke="#2a3a6a" stroke-width="1.2"/>
+        <text x="143" y="115" fill="#3a4a8a" font-size="8" font-family="monospace">PLANET SPACE</text>
+        <!-- Planet circle -->
+        <circle cx="175" cy="145" r="28" fill="#1a2a1a" stroke="#2a4a2a" stroke-width="0.8"/>
+        <text x="148" y="188" fill="#3a5a3a" font-size="7" font-family="monospace">planet (200, 0)</text>
+
+        <!-- City space inside planet -->
+        <rect x="193" y="118" width="72" height="52" rx="3" fill="#0a1a0a" stroke="#2a5a2a" stroke-width="1"/>
+        <text x="197" y="129" fill="#2a6a2a" font-size="6.5" font-family="monospace">CITY SPACE</text>
+        <!-- city blocks -->
+        <rect x="197" y="132" width="8" height="10" fill="#4a6b4a" rx="1"/>
+        <rect x="207" y="130" width="8" height="12" fill="#3a5a3a" rx="1"/>
+        <rect x="218" y="134" width="6" height="8" fill="#5a8a5a" rx="1"/>
+        <rect x="197" y="145" width="10" height="8" fill="#4a6b4a" rx="1"/>
+        <rect x="209" y="144" width="8" height="9" fill="#3a5a3a" rx="1"/>
+        <text x="197" y="178" fill="#2a5a2a" font-size="6" font-family="monospace">city (0.3, 0.1)</text>
+
+        <!-- Street space inside city -->
+        <rect x="226" y="122" width="35" height="32" rx="2" fill="#0a100a" stroke="#3a7a3a" stroke-width="0.8"/>
+        <text x="228" y="131" fill="#3a8a3a" font-size="5.5" font-family="monospace">STREET</text>
+        <line x1="228" y1="135" x2="259" y2="135" stroke="#2a4a2a" stroke-width="0.5"/>
+        <line x1="228" y1="142" x2="259" y2="142" stroke="#2a4a2a" stroke-width="0.5"/>
+        <line x1="238" y1="131" x2="238" y2="152" stroke="#2a4a2a" stroke-width="0.5"/>
+        <line x1="248" y1="131" x2="248" y2="152" stroke="#2a4a2a" stroke-width="0.5"/>
+        <rect x="230" y="136" width="7" height="5" fill="#7c6e8a" rx="0.5"/>
+        <rect x="240" y="133" width="7" height="8" fill="#5a4f6a" rx="0.5"/>
+        <rect x="250" y="136" width="7" height="5" fill="#4a6b4a" rx="0.5"/>
+        <text x="228" y="158" fill="#2a6a2a" font-size="5" font-family="monospace">road (4, 2)</text>
+
+        <!-- arrows showing nesting -->
+        <line x1="68" y1="150" x2="133" y2="150" stroke="#2a2a5a" stroke-width="0.8" stroke-dasharray="2,2"/>
+        <text x="78" y="146" fill="#3a3a6a" font-size="7" font-family="monospace">200 units</text>
+      </svg>
+    </div>
+
+    <!-- Explanation -->
+    <div style="flex:1;min-width:220px;">
+      <div class="section">
+        <div class="label">The key insight</div>
+        <p style="color:#9ca3af;font-size:13px;line-height:1.6">
+          A road at position <code style="background:#1a1a2e;padding:2px 5px;border-radius:3px;color:#a78bfa">(4, 2)</code> inside its street space doesn't need to know it's orbiting a sun 200 units away.
+        </p>
+        <p style="color:#9ca3af;font-size:13px;line-height:1.6;margin-top:8px">
+          Each layer only stores <strong style="color:#e5e7eb">small numbers</strong> relative to its parent. The GPU never sees numbers like <code style="background:#1a1a2e;padding:2px 5px;border-radius:3px;color:#f87171">200,000,004.0</code> — which would cause shimmering.
+        </p>
+      </div>
+
+      <div class="section" style="margin-top:16px;">
+        <div class="label">What you see as you zoom</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:10px;height:10px;background:#7c6e8a;border-radius:2px;flex-shrink:0"></div>
+            <span style="color:#9ca3af;font-size:12px">Street space active → buildings, roads, kerbs</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:10px;height:10px;background:#4a6b4a;border-radius:2px;flex-shrink:0"></div>
+            <span style="color:#9ca3af;font-size:12px">City space active → city blocks as coloured boxes</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:10px;height:10px;background:#1a2a4a;border-radius:2px;flex-shrink:0"></div>
+            <span style="color:#9ca3af;font-size:12px">Planet space active → city as a dot on a sphere</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:10px;height:10px;background:#f59e0b;border-radius:2px;flex-shrink:0"></div>
+            <span style="color:#9ca3af;font-size:12px">Solar space active → planet orbiting a sun</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" style="margin-top:16px;padding:12px;background:#0a0a14;border-radius:6px;border:1px solid #1e1e3a;">
+        <div class="label">In Bevy terms</div>
+        <p style="color:#9ca3af;font-size:12px;margin-top:6px;line-height:1.5">
+          Each space is just a parent entity with children. Bevy's transform system handles composing them. You zoom by switching which parent's coordinate system the camera "lives in."
+        </p>
+      </div>
+    </div>
+  </div>
+</div>

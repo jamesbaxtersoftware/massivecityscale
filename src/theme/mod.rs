@@ -2,6 +2,7 @@ pub mod themes;
 
 use bevy::prelude::*;
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct BuildingColors {
     pub residential: Color,

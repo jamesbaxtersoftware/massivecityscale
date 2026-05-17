@@ -1,0 +1,129 @@
+<h2>How do zoom levels transition?</h2>
+<p class="subtitle">As you scroll out from street → block → city → planet, how does the world change?</p>
+
+<div class="cards">
+  <div class="card" data-choice="discrete" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d1117;padding:16px;min-height:170px;display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center;">
+      <div style="display:flex;gap:12px;align-items:flex-end;">
+        <!-- Street level: detailed boxes -->
+        <div style="text-align:center;">
+          <svg width="60" height="60" viewBox="0 0 60 60">
+            <rect x="5" y="20" width="18" height="35" fill="#7c6e8a"/>
+            <rect x="25" y="10" width="18" height="45" fill="#5a4f6a"/>
+            <rect x="45" y="28" width="12" height="27" fill="#4a6b4a"/>
+            <line x1="0" y1="55" x2="60" y2="55" stroke="#2a3f2a" stroke-width="1"/>
+            <line x1="23" y1="55" x2="23" y2="30" stroke="#1a2f1a" stroke-width="0.5"/>
+          </svg>
+          <div style="color:#6b7280;font-size:10px;margin-top:2px">Street</div>
+        </div>
+        <div style="color:#374151;font-size:20px;font-weight:bold;padding-bottom:20px">→</div>
+        <!-- City level: small uniform dots -->
+        <div style="text-align:center;">
+          <svg width="60" height="60" viewBox="0 0 60 60">
+            <rect x="4" y="4" width="8" height="8" fill="#7c6e8a"/>
+            <rect x="14" y="2" width="8" height="10" fill="#5a4f6a"/>
+            <rect x="24" y="6" width="6" height="6" fill="#4a6b4a"/>
+            <rect x="32" y="3" width="10" height="9" fill="#6b4a4a"/>
+            <rect x="4" y="16" width="6" height="6" fill="#6b6b4a"/>
+            <rect x="14" y="18" width="8" height="4" fill="#4a4a6b"/>
+            <rect x="24" y="15" width="6" height="7" fill="#7c6e8a"/>
+            <rect x="32" y="17" width="8" height="5" fill="#5a4f6a"/>
+            <rect x="4" y="28" width="10" height="5" fill="#4a6b4a"/>
+            <rect x="16" y="26" width="6" height="7" fill="#6b4a4a"/>
+            <rect x="24" y="28" width="8" height="5" fill="#6b6b4a"/>
+          </svg>
+          <div style="color:#6b7280;font-size:10px;margin-top:2px">City</div>
+        </div>
+        <div style="color:#374151;font-size:20px;font-weight:bold;padding-bottom:20px">→</div>
+        <!-- Planet level: circle -->
+        <div style="text-align:center;">
+          <svg width="60" height="60" viewBox="0 0 60 60">
+            <circle cx="30" cy="30" r="24" fill="#1a2f4a" stroke="#2a4f6a" stroke-width="1"/>
+            <ellipse cx="30" cy="30" rx="24" ry="8" fill="none" stroke="#2a6b4a" stroke-width="0.5" opacity="0.5"/>
+            <circle cx="18" cy="22" r="5" fill="#2a4f2a" opacity="0.6"/>
+            <circle cx="35" cy="18" r="7" fill="#2a4f2a" opacity="0.5"/>
+            <circle cx="28" cy="35" r="4" fill="#2a4f2a" opacity="0.4"/>
+          </svg>
+          <div style="color:#6b7280;font-size:10px;margin-top:2px">Planet</div>
+        </div>
+      </div>
+      <div style="color:#4b5563;font-size:11px;text-align:center;max-width:260px">Each zoom threshold snaps to a completely different visual representation</div>
+    </div>
+    <div class="card-body">
+      <h3>A — Discrete LOD Levels</h3>
+      <p>Snap between distinct representations at thresholds. Street = detailed buildings. City = colored tiles. Country = outlines. Planet = a sphere. Each level is its own scene.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="continuous" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d1117;padding:16px;min-height:170px;display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center;">
+      <div style="display:flex;gap:4px;align-items:center;">
+        <!-- gradient of building sizes -->
+        <svg width="200" height="80" viewBox="0 0 200 80">
+          <!-- buildings getting smaller left to right showing zoom-out effect -->
+          <rect x="5" y="20" width="22" height="55" fill="#7c6e8a"/>
+          <rect x="30" y="30" width="18" height="45" fill="#5a4f6a"/>
+          <rect x="50" y="10" width="22" height="65" fill="#4a6b4a"/>
+          <rect x="80" y="38" width="12" height="37" fill="#6b4a4a"/>
+          <rect x="95" y="42" width="10" height="33" fill="#7c6e8a" opacity="0.9"/>
+          <rect x="108" y="46" width="8" height="29" fill="#5a4f6a" opacity="0.8"/>
+          <rect x="120" y="52" width="6" height="23" fill="#4a6b4a" opacity="0.7"/>
+          <rect x="130" y="55" width="5" height="20" fill="#6b4a4a" opacity="0.6"/>
+          <rect x="139" y="58" width="4" height="17" fill="#7c6e8a" opacity="0.5"/>
+          <rect x="147" y="60" width="3" height="15" fill="#5a4f6a" opacity="0.4"/>
+          <rect x="154" y="62" width="2" height="13" fill="#4a6b4a" opacity="0.3"/>
+          <rect x="160" y="64" width="2" height="11" fill="#6b4a4a" opacity="0.2"/>
+          <rect x="166" y="65" width="2" height="10" fill="#7c6e8a" opacity="0.15"/>
+          <rect x="172" y="66" width="1" height="9" fill="#5a4f6a" opacity="0.1"/>
+          <!-- ground -->
+          <line x1="0" y1="75" x2="200" y2="75" stroke="#2a3f2a" stroke-width="1"/>
+          <!-- zoom arrow -->
+          <text x="5" y="12" fill="#4b5563" font-size="8" font-family="monospace">← zoomed in</text>
+          <text x="120" y="12" fill="#4b5563" font-size="8" font-family="monospace">zoomed out →</text>
+        </svg>
+      </div>
+      <div style="color:#4b5563;font-size:11px;text-align:center;max-width:260px">Same geometry scales continuously — buildings shrink until they become pixels/colors</div>
+    </div>
+    <div class="card-body">
+      <h3>B — Continuous Smooth Zoom</h3>
+      <p>Everything exists at once and just gets smaller. Buildings become dots, dots become city blobs, blobs become a continent shape. No discrete snapping.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d1117;padding:16px;min-height:170px;display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center;">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:center;">
+        <svg width="190" height="80" viewBox="0 0 190 80">
+          <!-- zone 1: detailed buildings -->
+          <rect x="2" y="25" width="14" height="50" fill="#7c6e8a"/>
+          <rect x="18" y="15" width="14" height="60" fill="#5a4f6a"/>
+          <rect x="34" y="30" width="10" height="45" fill="#4a6b4a"/>
+          <!-- fade zone -->
+          <rect x="48" y="40" width="8" height="35" fill="#7c6e8a" opacity="0.6"/>
+          <rect x="58" y="45" width="6" height="30" fill="#5a4f6a" opacity="0.4"/>
+          <!-- zone 2: tile representation -->
+          <rect x="68" y="52" width="8" height="8" fill="#7c6e8a" rx="1"/>
+          <rect x="78" y="50" width="8" height="8" fill="#4a6b4a" rx="1"/>
+          <rect x="88" y="54" width="6" height="6" fill="#6b4a4a" rx="1"/>
+          <rect x="68" y="62" width="6" height="6" fill="#5a4f6a" rx="1"/>
+          <rect x="78" y="62" width="8" height="6" fill="#7c6e8a" rx="1"/>
+          <!-- fade zone 2 -->
+          <rect x="100" y="56" width="5" height="5" fill="#7c6e8a" rx="1" opacity="0.5"/>
+          <rect x="107" y="57" width="4" height="4" fill="#4a6b4a" rx="1" opacity="0.4"/>
+          <!-- zone 3: solid country shape -->
+          <ellipse cx="140" cy="55" rx="25" ry="15" fill="#2a4f2a" opacity="0.7"/>
+          <ellipse cx="148" cy="52" rx="12" ry="8" fill="#3a5f3a" opacity="0.6"/>
+          <line x1="0" y1="75" x2="190" y2="75" stroke="#2a3f2a" stroke-width="0.5"/>
+          <text x="2" y="10" fill="#4b5563" font-size="7" font-family="monospace">buildings</text>
+          <text x="62" y="46" fill="#4b5563" font-size="7" font-family="monospace">tiles</text>
+          <text x="118" y="46" fill="#4b5563" font-size="7" font-family="monospace">shapes</text>
+        </svg>
+      </div>
+      <div style="color:#4b5563;font-size:11px;text-align:center;max-width:260px">Smooth zoom within levels, cross-fade when switching representations</div>
+    </div>
+    <div class="card-body">
+      <h3>C — Hybrid (Recommended)</h3>
+      <p>Distinct representations per scale level, but smooth cross-fade between them. Best of both — each level looks intentional, transitions feel fluid.</p>
+    </div>
+  </div>
+</div>

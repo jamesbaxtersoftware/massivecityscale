@@ -39,7 +39,7 @@ pub fn spawn_solar_system(
     commands.spawn((
         Mesh3d(ring_mesh),
         MeshMaterial3d(ring_mat),
-        Transform::from_xyz(-800.0, 0.0, 0.0),
+        Transform::IDENTITY,
     )).set_parent(parent);
 
     // Planet dot at orbit position
