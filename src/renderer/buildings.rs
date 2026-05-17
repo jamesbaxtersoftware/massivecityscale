@@ -35,7 +35,7 @@ fn block_world_pos(city: &CityData, district: &DistrictData, block: &BlockData) 
     let dz = (district.z - city.lon) / 3.0 * DIST_SCALE;
     let bx = (block.x - district.x) * BLOCK_SCALE;
     let bz = (block.z - district.z) * BLOCK_SCALE;
-    Vec3::new(cx + dx + bx, 0.0, cz + dz + bz)
+    Vec3::new(cx + dx + bx, 0.0, cz + dz + bz) // Y adjusted by caller after averaging block height
 }
 
 pub fn spawn_street_buildings(
@@ -65,7 +65,7 @@ pub fn spawn_street_buildings(
                         MeshMaterial3d(material),
                         Transform::from_translation(pos),
                         LodRange { min_scale: LOD_BUILDINGS.0, max_scale: LOD_BUILDINGS.1 },
-                        Visibility::Hidden,
+                        Visibility::Hidden, // LodPlugin manages visibility each frame
                     ));
                 }
             }
@@ -84,7 +84,7 @@ pub fn spawn_block_level(
         for district in &city.districts {
             for block in &district.blocks {
                 let avg_height: f32 = if block.buildings.is_empty() {
-                    0.5
+                    0.5 // fallback height for empty blocks (1 km raw → 0.05 km scaled)
                 } else {
                     block.buildings.iter().map(|b| b.height).sum::<f32>()
                         / block.buildings.len() as f32
@@ -92,7 +92,7 @@ pub fn spawn_block_level(
                 let box_height = avg_height * BLDG_H_SCALE;
                 let mut pos = block_world_pos(city, district, block);
                 pos.y = box_height / 2.0;
-                let mesh = meshes.add(Cuboid::new(BLOCK_SCALE * 0.85, box_height, BLOCK_SCALE * 0.85));
+                let mesh = meshes.add(Cuboid::new(BLOCK_SCALE * 0.85, box_height, BLOCK_SCALE * 0.85)); // 0.85: gap between adjacent blocks
                 let material = materials.add(StandardMaterial {
                     // Block level uses uniform color; individual height variation averages out
                     base_color: theme.buildings.residential,
