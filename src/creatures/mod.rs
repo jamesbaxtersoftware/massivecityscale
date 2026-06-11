@@ -194,6 +194,10 @@ impl Plugin for CreaturesPlugin {
         app.init_state::<GameState>()
            .init_resource::<Collection>()
            .init_resource::<Inventory>()
-           .add_systems(Startup, spawn::spawn_wild_monsters.after(crate::renderer::solar::spawn_solar_system));
+           .add_systems(Startup, spawn::spawn_wild_monsters.after(crate::renderer::solar::spawn_solar_system))
+           .add_systems(OnEnter(GameState::StarterSelect), starter::spawn_starters)
+           .add_systems(OnExit(GameState::StarterSelect), starter::despawn_starters)
+           .add_systems(Update, starter::pick_starter.run_if(in_state(GameState::StarterSelect)))
+           .add_systems(Update, pick::pick_wild_monster.run_if(in_state(GameState::Exploring)));
     }
 }
