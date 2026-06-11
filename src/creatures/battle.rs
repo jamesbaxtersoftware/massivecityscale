@@ -109,6 +109,7 @@ pub fn battle_input(
             caught.hp = caught.max_hp;
             collection.0.push(caught);
             commands.entity(session.wild_entity).despawn_recursive();
+            player.0.heal_full();
             next_state.set(GameState::Exploring);
             return;
         }

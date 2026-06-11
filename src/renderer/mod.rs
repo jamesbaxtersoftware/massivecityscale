@@ -4,6 +4,7 @@ pub mod terrain;
 pub mod solar;
 
 use bevy::ecs::schedule::IntoSystemConfigs;
+use bevy::ecs::schedule::common_conditions::not;
 use bevy::prelude::*;
 
 #[derive(Resource)]
@@ -23,7 +24,8 @@ impl Plugin for RendererPlugin {
             terrain::spawn_sphere_continents,
         ).chain())
         .init_resource::<solar::ClickTracker>()
-        .add_systems(Update, (solar::orbit_bodies, solar::center_starfield_on_camera))
+        .add_systems(Update, solar::orbit_bodies.run_if(not(in_state(crate::creatures::GameState::Battle))))
+        .add_systems(Update, solar::center_starfield_on_camera)
         .add_systems(Update, solar::pick_planet.run_if(in_state(crate::creatures::GameState::Exploring)));
     }
 }

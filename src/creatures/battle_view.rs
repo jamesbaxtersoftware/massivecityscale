@@ -52,13 +52,14 @@ pub fn billboard_hp_bars(
     }
 }
 
-/// Scale the green fill to the current HP fraction, anchored on the left edge.
+/// Scale + recolor the green→red fill to the current HP fraction, anchored on the left edge.
 pub fn update_hp_bars(
     session: Res<super::BattleSession>,
     player: Res<super::PlayerCreature>,
     wild_q: Query<&super::Creature, With<super::WildMonster>>,
     bars: Query<(&HpBar, &Children)>,
-    mut fills: Query<&mut Transform, With<HpFill>>,
+    mut fills: Query<(&mut Transform, &MeshMaterial3d<StandardMaterial>), With<HpFill>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let wild_max = wild_q.get(session.wild_entity).map(|c| c.max_hp).unwrap_or(1).max(1);
     for (bar, children) in &bars {
@@ -67,9 +68,13 @@ pub fn update_hp_bars(
             BattleSide::Wild   => session.wild_hp as f32 / wild_max as f32,
         }.clamp(0.0, 1.0);
         for &child in children {
-            if let Ok(mut t) = fills.get_mut(child) {
+            if let Ok((mut t, mat)) = fills.get_mut(child) {
                 t.scale.x = frac;
                 t.translation.x = -BAR_W * (1.0 - frac) * 0.5;
+                if let Some(m) = materials.get_mut(&mat.0) {
+                    // full = green, empty = red
+                    m.base_color = Color::srgb(0.9 - 0.7 * frac, 0.2 + 0.7 * frac, 0.2);
+                }
             }
         }
     }
