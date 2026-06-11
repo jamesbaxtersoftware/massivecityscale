@@ -3,6 +3,7 @@ mod theme;
 mod camera;
 mod lod;
 mod renderer;
+mod creatures;
 
 use bevy::prelude::*;
 use world_gen::WorldGenPlugin;
@@ -10,6 +11,7 @@ use theme::ThemePlugin;
 use camera::CameraPlugin;
 use lod::LodPlugin;
 use renderer::RendererPlugin;
+use creatures::CreaturesPlugin;
 
 fn main() {
     App::new()
@@ -27,6 +29,7 @@ fn main() {
         .add_plugins(CameraPlugin)
         .add_plugins(LodPlugin)
         .add_plugins(RendererPlugin)
+        .add_plugins(CreaturesPlugin)
         .add_systems(Startup, spawn_light)
         .add_systems(Update, quit_on_escape)
         .run();
