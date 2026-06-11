@@ -177,6 +177,11 @@ pub fn apply_xp(c: &mut Creature, gained: u32) {
     c.hp = c.max_hp;
 }
 
+pub fn trap_chance(hp: i32, max_hp: i32, base: f32) -> f32 {
+    let frac = (hp.max(0) as f32) / (max_hp.max(1) as f32);
+    (base + (1.0 - frac)).clamp(0.0, 1.0)
+}
+
 /// Classify a planet color: red channel >= blue channel -> Fire, else Water.
 pub fn type_from_color(c: Color) -> CreatureType {
     let s = c.to_srgba();
@@ -230,6 +235,16 @@ mod tests {
         assert!(c.level > 1);
         assert!(c.max_hp > hp0 && c.attack > atk0);
         assert_eq!(c.hp, c.max_hp, "level-up heals to full");
+    }
+
+    #[test]
+    fn trap_chance_rises_as_hp_falls_and_is_clamped() {
+        let full = trap_chance(30, 30, 0.2);
+        let low = trap_chance(1, 30, 0.2);
+        assert!(low > full);
+        assert!((0.0..=1.0).contains(&full));
+        assert!((0.0..=1.0).contains(&low));
+        assert_eq!(trap_chance(0, 30, 0.2), 1.0_f32.min(0.2 + 1.0).min(1.0));
     }
 }
 
