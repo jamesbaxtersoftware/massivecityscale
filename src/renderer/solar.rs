@@ -51,6 +51,10 @@ pub struct ClickTracker {
     drag_sq: f32,
 }
 
+impl ClickTracker {
+    pub fn drag_sq(&self) -> f32 { self.drag_sq }
+}
+
 #[derive(Component)]
 pub struct OrbitalBody {
     center:      Vec3,
@@ -316,33 +320,19 @@ pub fn pick_planet(
     let Ok(proj)       = proj_query.get_single() else { return };
     let Projection::Orthographic(ortho) = proj else { return };
     let Ok(window)     = windows.get_single() else { return };
-    let Some(cursor)   = window.cursor_position() else { return };
+    let Some((ray_o, forward)) = crate::creatures::pick::ortho_pick_ray(window, ortho.scale, &orbit) else { return };
 
-    // Build orthographic ray from cursor position
+    // cam_pos is still needed below to recompute orbit angles after picking
     let cam_pos = orbit.camera_pos();
-    let forward = (orbit.pivot - cam_pos).normalize();
-    let right   = forward.cross(Vec3::Y).normalize();
-    let up      = right.cross(forward);
-
-    let win    = Vec2::new(window.width(), window.height());
-    let ndc    = Vec2::new(cursor.x / win.x * 2.0 - 1.0, 1.0 - cursor.y / win.y * 2.0);
-    let half_w = ortho.scale * win.x / 2.0;
-    let half_h = ortho.scale * win.y / 2.0;
-    let ray_o  = cam_pos + ndc.x * half_w * right + ndc.y * half_h * up;
 
     // Ray-sphere test against all selectable bodies; pick the nearest hit
     let mut best: Option<(Entity, Vec3, f32)> = None;
     for (entity, gtransform, body) in &bodies {
         let center = gtransform.translation() + body.pivot_offset;
-        let l  = ray_o - center;
-        let b  = l.dot(forward);
-        let c  = l.dot(l) - body.radius * body.radius;
-        let d  = b * b - c;
-        if d < 0.0 { continue; }
-        let t  = -b - d.sqrt();
-        if t < 0.0 { continue; }
-        if best.map_or(true, |(_, _, bt)| t < bt) {
-            best = Some((entity, center, t));
+        if let Some(t) = crate::creatures::pick::ray_sphere_t(ray_o, forward, center, body.radius) {
+            if best.map_or(true, |(_, _, bt)| t < bt) {
+                best = Some((entity, center, t));
+            }
         }
     }
 
