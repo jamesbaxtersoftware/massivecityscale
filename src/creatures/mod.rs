@@ -100,6 +100,37 @@ impl Default for Inventory {
     fn default() -> Self { Self { force_fields: 3 } }
 }
 
+// ── Battle session ───────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Turn { Player, Enemy }
+
+#[derive(Resource)]
+pub struct BattleSession {
+    pub wild_entity: Entity,
+    pub turn: Turn,
+    /// Entities spawned only for the battle view (player creature, HP bars),
+    /// despawned on teardown.
+    pub view_entities: Vec<Entity>,
+    /// Snapshot of camera framing to restore when the battle ends.
+    pub saved_orbit: Option<crate::camera::zoom::OrbitState>,
+    pub player_hp: i32,
+    pub wild_hp: i32,
+}
+
+impl BattleSession {
+    pub fn new(wild_entity: Entity) -> Self {
+        Self {
+            wild_entity,
+            turn: Turn::Player,
+            view_entities: Vec::new(),
+            saved_orbit: None,
+            player_hp: 0,
+            wild_hp: 0,
+        }
+    }
+}
+
 // ── State ────────────────────────────────────────────────────────────────────────
 
 #[derive(States, Default, Clone, Eq, PartialEq, Hash, Debug)]
