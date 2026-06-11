@@ -124,6 +124,12 @@ pub fn type_multiplier(attacker: CreatureType, defender: CreatureType) -> f32 {
     }
 }
 
+/// Classify a planet color: red channel >= blue channel -> Fire, else Water.
+pub fn type_from_color(c: Color) -> CreatureType {
+    let s = c.to_srgba();
+    if s.red >= s.blue { CreatureType::Fire } else { CreatureType::Water }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,6 +144,16 @@ mod tests {
     fn same_type_is_neutral() {
         assert_eq!(type_multiplier(CreatureType::Fire, CreatureType::Fire), 1.0);
         assert_eq!(type_multiplier(CreatureType::Water, CreatureType::Water), 1.0);
+    }
+
+    #[test]
+    fn warm_colors_are_fire_cool_are_water() {
+        // lava orange
+        assert_eq!(type_from_color(Color::srgb(0.95, 0.28, 0.05)), CreatureType::Fire);
+        // ocean blue
+        assert_eq!(type_from_color(Color::srgb(0.10, 0.38, 0.90)), CreatureType::Water);
+        // ice cyan (blue dominant)
+        assert_eq!(type_from_color(Color::srgb(0.35, 0.82, 0.88)), CreatureType::Water);
     }
 }
 
