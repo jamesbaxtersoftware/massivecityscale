@@ -6,6 +6,7 @@ pub mod battle_view;
 
 use bevy::prelude::*;
 use bevy::ecs::schedule::IntoSystemConfigs;
+use rand::SeedableRng;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -258,11 +259,16 @@ impl Plugin for CreaturesPlugin {
            .add_systems(OnExit(GameState::StarterSelect), starter::despawn_starters)
            .add_systems(Update, starter::pick_starter.run_if(in_state(GameState::StarterSelect)))
            .add_systems(Update, pick::pick_wild_monster.run_if(in_state(GameState::Exploring)))
+           .insert_resource(battle::BattleRng(rand_chacha::ChaCha8Rng::seed_from_u64(0x_B47_71E)))
            .add_systems(OnEnter(GameState::Battle), battle::setup_battle)
            .add_systems(OnExit(GameState::Battle), battle::teardown_battle)
            .add_systems(Update, (
                battle_view::billboard_hp_bars,
                battle_view::update_hp_bars,
-           ).run_if(in_state(GameState::Battle)));
+           ).run_if(in_state(GameState::Battle)))
+           .add_systems(Update, (
+               battle::battle_input,
+               battle::enemy_turn,
+           ).chain().run_if(in_state(GameState::Battle)));
     }
 }
