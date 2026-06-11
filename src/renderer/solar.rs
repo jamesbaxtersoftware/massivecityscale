@@ -1,12 +1,15 @@
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
+use bevy::window::PrimaryWindow;
+use bevy::input::mouse::MouseMotion;
 use rand::SeedableRng;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use crate::lod::LodRange;
-use crate::renderer::scale_consts::{LOD_SOLAR, SPHERE_CENTER_Y};
+use crate::renderer::scale_consts::LOD_SOLAR;
 use crate::camera::zoom::OrbitState;
+use crate::creatures::{PlanetType, type_from_color};
 
 const N_STARS: usize       = 4_000;
 const STAR_SPHERE_R: f32   = 19_000.0; // km — large enough that frustum corners never escape it
@@ -27,6 +30,26 @@ pub struct HomePlanet;
 /// Marker for the star-field mesh so it can be recentred on the camera every frame.
 #[derive(Component)]
 pub struct StarSphere;
+
+/// Sphere data used for click-to-select raycasting.
+#[derive(Component)]
+pub struct CelestialBody {
+    pub radius:       f32,
+    pub pivot_offset: Vec3, // offset from entity translation to camera orbit pivot
+}
+
+/// Which planet the camera currently orbits.
+#[derive(Resource)]
+pub struct ActivePlanet {
+    pub entity: Entity,
+}
+
+/// Tracks drag distance while the left mouse button is held so that a drag-to-orbit
+/// is not misinterpreted as a click.
+#[derive(Resource, Default)]
+pub struct ClickTracker {
+    drag_sq: f32,
+}
 
 #[derive(Component)]
 pub struct OrbitalBody {
@@ -64,17 +87,16 @@ impl OrbitalBody {
 
 pub fn orbit_bodies(
     time: Res<Time>,
-    mut query: Query<(&mut Transform, &mut OrbitalBody, Option<&HomePlanet>)>,
+    mut query: Query<(Entity, &mut Transform, &mut OrbitalBody, Option<&CelestialBody>)>,
     mut orbit_state: ResMut<OrbitState>,
+    active: Res<ActivePlanet>,
 ) {
-    for (mut transform, mut orbit, home) in &mut query {
+    for (entity, mut transform, mut orbit, body) in &mut query {
         orbit.angle += orbit.speed * time.delta_secs();
         let pos = orbit.position();
         transform.translation = pos;
-        // rotation left untouched so rings keep their world-space tilt
-        if home.is_some() {
-            // Sphere center sits SPHERE_CENTER_Y below the root entity
-            orbit_state.pivot = pos + Vec3::new(0.0, SPHERE_CENTER_Y, 0.0);
+        if entity == active.entity {
+            orbit_state.pivot = pos + body.map_or(Vec3::ZERO, |b| b.pivot_offset);
         }
     }
 }
@@ -154,6 +176,8 @@ pub fn spawn_solar_system(
             MeshMaterial3d(mat),
             Transform::from_translation(pos),
             orbit,
+            CelestialBody { radius: p.sphere_radius, pivot_offset: Vec3::ZERO },
+            PlanetType(type_from_color(p.color)),
             LodRange { min_scale: LOD_SOLAR.0, max_scale: LOD_SOLAR.1 },
             Visibility::Hidden,
         ));
@@ -259,6 +283,82 @@ pub fn spawn_starfield(
         LodRange { min_scale: LOD_STARS.0, max_scale: LOD_STARS.1 },
         Visibility::Hidden,
     ));
+}
+
+// ── Planet selection ──────────────────────────────────────────────────────────
+// Single click on any planet switches the camera orbit target to that planet.
+// A drag (> 5 px movement) is treated as an orbit gesture, not a click.
+
+pub fn pick_planet(
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut motion:    EventReader<MouseMotion>,
+    windows:       Query<&Window, With<PrimaryWindow>>,
+    proj_query:    Query<&Projection, With<Camera3d>>,
+    bodies:        Query<(Entity, &GlobalTransform, &CelestialBody)>,
+    mut active:    ResMut<ActivePlanet>,
+    mut orbit:     ResMut<OrbitState>,
+    mut tracker:   ResMut<ClickTracker>,
+) {
+    if mouse_buttons.just_pressed(MouseButton::Left) {
+        tracker.drag_sq = 0.0;
+    }
+    if mouse_buttons.pressed(MouseButton::Left) {
+        for ev in motion.read() {
+            tracker.drag_sq += ev.delta.length_squared();
+        }
+    } else {
+        motion.clear();
+    }
+
+    if !mouse_buttons.just_released(MouseButton::Left) { return; }
+    if tracker.drag_sq > 25.0 { return; } // was a drag, not a click
+
+    let Ok(proj)       = proj_query.get_single() else { return };
+    let Projection::Orthographic(ortho) = proj else { return };
+    let Ok(window)     = windows.get_single() else { return };
+    let Some(cursor)   = window.cursor_position() else { return };
+
+    // Build orthographic ray from cursor position
+    let cam_pos = orbit.camera_pos();
+    let forward = (orbit.pivot - cam_pos).normalize();
+    let right   = forward.cross(Vec3::Y).normalize();
+    let up      = right.cross(forward);
+
+    let win    = Vec2::new(window.width(), window.height());
+    let ndc    = Vec2::new(cursor.x / win.x * 2.0 - 1.0, 1.0 - cursor.y / win.y * 2.0);
+    let half_w = ortho.scale * win.x / 2.0;
+    let half_h = ortho.scale * win.y / 2.0;
+    let ray_o  = cam_pos + ndc.x * half_w * right + ndc.y * half_h * up;
+
+    // Ray-sphere test against all selectable bodies; pick the nearest hit
+    let mut best: Option<(Entity, Vec3, f32)> = None;
+    for (entity, gtransform, body) in &bodies {
+        let center = gtransform.translation() + body.pivot_offset;
+        let l  = ray_o - center;
+        let b  = l.dot(forward);
+        let c  = l.dot(l) - body.radius * body.radius;
+        let d  = b * b - c;
+        if d < 0.0 { continue; }
+        let t  = -b - d.sqrt();
+        if t < 0.0 { continue; }
+        if best.map_or(true, |(_, _, bt)| t < bt) {
+            best = Some((entity, center, t));
+        }
+    }
+
+    let Some((entity, center, _)) = best else { return };
+    if active.entity == entity { return; } // already active, nothing to do
+
+    active.entity = entity;
+
+    // Recompute orbit angles from current camera position so the camera doesn't jump
+    let offset = cam_pos - center;
+    let dist   = offset.length();
+    const MAX_EL: f32 = std::f32::consts::FRAC_PI_2 - 0.1;
+    orbit.pivot     = center;
+    orbit.distance  = dist;
+    orbit.elevation = (offset.y / dist).asin().clamp(-MAX_EL, MAX_EL);
+    orbit.azimuth   = offset.x.atan2(offset.z);
 }
 
 // ── Star follow ───────────────────────────────────────────────────────────────
