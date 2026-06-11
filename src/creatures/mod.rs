@@ -113,6 +113,34 @@ pub enum GameState {
 
 pub struct CreaturesPlugin;
 
+// ── Free functions ───────────────────────────────────────────────────────────────
+
+pub fn type_multiplier(attacker: CreatureType, defender: CreatureType) -> f32 {
+    use CreatureType::*;
+    match (attacker, defender) {
+        (Water, Fire) => 2.0,
+        (Fire, Water) => 0.5,
+        _ => 1.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn water_beats_fire_fire_weak_to_water() {
+        assert_eq!(type_multiplier(CreatureType::Water, CreatureType::Fire), 2.0);
+        assert_eq!(type_multiplier(CreatureType::Fire, CreatureType::Water), 0.5);
+    }
+
+    #[test]
+    fn same_type_is_neutral() {
+        assert_eq!(type_multiplier(CreatureType::Fire, CreatureType::Fire), 1.0);
+        assert_eq!(type_multiplier(CreatureType::Water, CreatureType::Water), 1.0);
+    }
+}
+
 impl Plugin for CreaturesPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>()
