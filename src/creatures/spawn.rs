@@ -1,5 +1,48 @@
 use bevy::prelude::*;
+use rand::SeedableRng;
+use rand::Rng;
+use rand_chacha::ChaCha8Rng;
 use super::{CreatureType, Species};
+use super::{Creature, PlanetType, WildMonster, ClickSphere};
+use crate::renderer::solar::CelestialBody;
+use crate::lod::LodRange;
+use crate::renderer::scale_consts::LOD_SOLAR;
+
+const MONSTERS_PER_PLANET: usize = 3;
+const MONSTER_SCALE: f32 = 28.0; // km
+
+pub fn spawn_wild_monsters(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    planets: Query<(Entity, &PlanetType, &CelestialBody)>,
+) {
+    let mut rng = ChaCha8Rng::seed_from_u64(0x_C0FF_EE15_600D);
+    for (planet, ptype, body) in &planets {
+        let species = Species::of_type(ptype.0);
+        let vis = build_visual(ptype.0, MONSTER_SCALE, &mut meshes, &mut materials);
+        for _ in 0..MONSTERS_PER_PLANET {
+            let dir = Vec3::new(
+                rng.gen_range(-1.0..1.0),
+                rng.gen_range(-1.0..1.0),
+                rng.gen_range(-1.0..1.0),
+            ).normalize_or_zero();
+            let local = Transform::from_translation(dir * (body.radius + MONSTER_SCALE));
+            let level: u32 = rng.gen_range(2..=5);
+            let monster = commands.spawn((
+                Creature::new(species, level),
+                WildMonster,
+                ClickSphere { radius: MONSTER_SCALE * 1.5 },
+                local,
+                GlobalTransform::default(),
+                Visibility::Inherited,
+                LodRange { min_scale: 0.0, max_scale: LOD_SOLAR.1 },
+            )).id();
+            commands.entity(planet).add_child(monster);
+            spawn_creature_visual(&mut commands, monster, Transform::IDENTITY, &vis);
+        }
+    }
+}
 
 /// Mesh/material handles for a creature of a given type. Accent is the flame
 /// spike (Fire) or fin (Water) attached above/behind the body.
@@ -78,4 +121,39 @@ pub fn spawn_creature_visual(
             ));
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use crate::creatures::{CreaturesPlugin, PlanetType, WildMonster, CreatureType};
+    use crate::renderer::solar::CelestialBody;
+
+    #[test]
+    fn wild_monsters_spawn_as_children_of_a_planet() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+           .add_plugins(bevy::state::app::StatesPlugin)
+           .add_plugins(AssetPlugin::default())
+           .init_asset::<Mesh>()
+           .init_asset::<StandardMaterial>()
+           .add_plugins(CreaturesPlugin);
+
+        let planet = app.world_mut().spawn((
+            Transform::from_xyz(1000.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            PlanetType(CreatureType::Fire),
+            CelestialBody { radius: 200.0, pivot_offset: Vec3::ZERO },
+        )).id();
+
+        app.world_mut().run_system_once(spawn_wild_monsters).unwrap();
+
+        let count = app.world_mut()
+            .query::<(&WildMonster, &Parent)>()
+            .iter(app.world())
+            .filter(|(_, p)| p.get() == planet)
+            .count();
+        assert!(count > 0, "expected wild monsters parented to the planet");
+    }
 }

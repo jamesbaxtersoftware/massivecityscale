@@ -5,6 +5,7 @@ pub mod battle;
 pub mod battle_view;
 
 use bevy::prelude::*;
+use bevy::ecs::schedule::IntoSystemConfigs;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -161,6 +162,7 @@ impl Plugin for CreaturesPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>()
            .init_resource::<Collection>()
-           .init_resource::<Inventory>();
+           .init_resource::<Inventory>()
+           .add_systems(Startup, spawn::spawn_wild_monsters.after(crate::renderer::solar::spawn_solar_system));
     }
 }
