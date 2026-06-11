@@ -156,6 +156,27 @@ pub fn type_multiplier(attacker: CreatureType, defender: CreatureType) -> f32 {
     }
 }
 
+/// `roll` is a damage multiplier in [0.85, 1.0]; pass 1.0 for deterministic tests.
+pub fn damage(attacker: &Creature, defender: &Creature, mv: Move, roll: f32) -> i32 {
+    let mult = type_multiplier(attacker.creature_type(), defender.creature_type());
+    let base = mv.power as f32 * (attacker.attack as f32 / 10.0) * mult * roll;
+    base.round().max(1.0) as i32
+}
+
+pub fn xp_reward(wild_level: u32) -> u32 { wild_level * 20 }
+pub fn xp_to_next(level: u32) -> u32 { level * 50 }
+
+pub fn apply_xp(c: &mut Creature, gained: u32) {
+    c.xp += gained;
+    while c.xp >= xp_to_next(c.level) {
+        c.xp -= xp_to_next(c.level);
+        c.level += 1;
+        c.max_hp += 5;
+        c.attack += 2;
+    }
+    c.hp = c.max_hp;
+}
+
 /// Classify a planet color: red channel >= blue channel -> Fire, else Water.
 pub fn type_from_color(c: Color) -> CreatureType {
     let s = c.to_srgba();
@@ -186,6 +207,29 @@ mod tests {
         assert_eq!(type_from_color(Color::srgb(0.10, 0.38, 0.90)), CreatureType::Water);
         // ice cyan (blue dominant)
         assert_eq!(type_from_color(Color::srgb(0.35, 0.82, 0.88)), CreatureType::Water);
+    }
+
+    #[test]
+    fn damage_scales_with_type_and_power() {
+        let fire = Creature::new(Species::Emberling, 5);
+        let water = Creature::new(Species::Tideling, 5);
+        let strong = Move { name: "Torrent", power: 14 };
+        // water -> fire is x2; deterministic roll = 1.0
+        let d = damage(&water, &fire, strong, 1.0);
+        // fire -> water is x0.5
+        let d2 = damage(&fire, &water, Move { name: "Flare", power: 14 }, 1.0);
+        assert!(d > d2, "super-effective should beat not-very-effective: {d} vs {d2}");
+        assert!(d >= 1);
+    }
+
+    #[test]
+    fn xp_levels_up_and_raises_stats() {
+        let mut c = Creature::new(Species::Emberling, 1);
+        let (hp0, atk0) = (c.max_hp, c.attack);
+        apply_xp(&mut c, 1000);
+        assert!(c.level > 1);
+        assert!(c.max_hp > hp0 && c.attack > atk0);
+        assert_eq!(c.hp, c.max_hp, "level-up heals to full");
     }
 }
 
