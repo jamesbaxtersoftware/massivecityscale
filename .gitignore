@@ -432,3 +432,4 @@ FodyWeavers.xsd
 # Added by cargo
 
 /target
+.superpowers/
