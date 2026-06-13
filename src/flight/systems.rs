@@ -143,3 +143,103 @@ pub fn nudge_ship_off_monster(
         tf.translation = gt.translation() + away * (cs.radius + ship.radius + 5.0);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use crate::creatures::{Creature, Species};
+
+    fn test_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+           .add_plugins(bevy::state::app::StatesPlugin)
+           .init_state::<GameState>()
+           .init_resource::<crate::flight::CollisionCooldown>();
+        app
+    }
+
+    /// Tick the cooldown to finished so collisions are live.
+    fn arm_collisions(app: &mut App) {
+        let mut cd = app.world_mut().resource_mut::<crate::flight::CollisionCooldown>();
+        cd.0.reset();
+        cd.0.tick(std::time::Duration::from_secs(5));
+    }
+
+    #[test]
+    fn overlap_starts_a_battle() {
+        let mut app = test_app();
+        arm_collisions(&mut app);
+
+        app.world_mut().spawn((
+            PlayerShip { radius: 10.0 },
+            ShipVelocity(Vec3::new(0.0, 0.0, -50.0)),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            GlobalTransform::default(),
+        ));
+        app.world_mut().spawn((
+            WildMonster,
+            ClickSphere { radius: 20.0 },
+            Transform::from_xyz(15.0, 0.0, 0.0),
+            GlobalTransform::from_xyz(15.0, 0.0, 0.0),
+            Creature::new(Species::Emberling, 3),
+        ));
+
+        app.world_mut().run_system_once(collide_with_monsters).unwrap();
+
+        assert!(app.world().get_resource::<BattleSession>().is_some(),
+            "battle session inserted on overlap");
+        match app.world().resource::<NextState<GameState>>() {
+            NextState::Pending(s) => assert_eq!(*s, GameState::Battle),
+            _ => panic!("expected transition to Battle"),
+        }
+    }
+
+    #[test]
+    fn no_battle_when_separated() {
+        let mut app = test_app();
+        arm_collisions(&mut app);
+
+        app.world_mut().spawn((
+            PlayerShip { radius: 10.0 },
+            ShipVelocity::default(),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            GlobalTransform::default(),
+        ));
+        app.world_mut().spawn((
+            WildMonster,
+            ClickSphere { radius: 10.0 },
+            Transform::from_xyz(500.0, 0.0, 0.0),
+            GlobalTransform::from_xyz(500.0, 0.0, 0.0),
+            Creature::new(Species::Emberling, 3),
+        ));
+
+        app.world_mut().run_system_once(collide_with_monsters).unwrap();
+        assert!(app.world().get_resource::<BattleSession>().is_none());
+    }
+
+    #[test]
+    fn cooldown_suppresses_immediate_retrigger() {
+        let mut app = test_app();
+        // Fresh cooldown (default starts finished); reset to running, do NOT arm.
+        app.world_mut().resource_mut::<crate::flight::CollisionCooldown>().0.reset();
+
+        app.world_mut().spawn((
+            PlayerShip { radius: 10.0 },
+            ShipVelocity::default(),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            GlobalTransform::default(),
+        ));
+        app.world_mut().spawn((
+            WildMonster,
+            ClickSphere { radius: 20.0 },
+            Transform::from_xyz(15.0, 0.0, 0.0),
+            GlobalTransform::from_xyz(15.0, 0.0, 0.0),
+            Creature::new(Species::Emberling, 3),
+        ));
+
+        app.world_mut().run_system_once(collide_with_monsters).unwrap();
+        assert!(app.world().get_resource::<BattleSession>().is_none(),
+            "cooldown still running suppresses the trigger");
+    }
+}
