@@ -4,7 +4,7 @@ use rand_chacha::ChaCha8Rng;
 use super::{BattleSession, PlayerCreature, Creature, WildMonster, Turn, Inventory, Collection, GameState, apply_xp, xp_reward, damage, trap_chance};
 use super::spawn::{build_visual, spawn_creature_visual};
 use super::battle_view::{spawn_hp_bar, BattleSide};
-use crate::camera::zoom::OrbitState;
+use crate::flight::physics::battle_camera_pose;
 
 const BATTLE_CREATURE_SCALE: f32 = 40.0;
 
@@ -14,26 +14,24 @@ pub fn setup_battle(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut session: ResMut<BattleSession>,
     player: Res<PlayerCreature>,
-    mut orbit: ResMut<OrbitState>,
+    mut cam_q: Query<&mut Transform, With<Camera3d>>,
     wild_q: Query<(&GlobalTransform, &Creature), With<WildMonster>>,
 ) {
     let Ok((wild_gt, wild)) = wild_q.get(session.wild_entity) else { return };
     let wild_pos = wild_gt.translation();
 
-    // Frame the battle: pivot on the wild monster, fixed close distance.
-    session.saved_orbit = Some(orbit.clone());
-    orbit.pivot = wild_pos;
-    orbit.distance = BATTLE_CREATURE_SCALE * 12.0;
-    orbit.elevation = 0.2;
+    // Frame the battle: camera at a fixed close distance facing the monster.
+    let pose = battle_camera_pose(wild_pos, BATTLE_CREATURE_SCALE);
+    if let Ok(mut cam) = cam_q.get_single_mut() {
+        cam.translation = pose.camera;
+        cam.look_at(pose.look_at, Vec3::Y);
+    }
 
     session.wild_hp = wild.hp;
     session.player_hp = player.0.max_hp; // heal to full at battle start
     session.turn = Turn::Player;
 
-    let cam = orbit.camera_pos();
-    let fwd = (orbit.pivot - cam).normalize();
-    let right = fwd.cross(Vec3::Y).normalize();
-    let player_pos = wild_pos - fwd * BATTLE_CREATURE_SCALE * 4.0 + right * BATTLE_CREATURE_SCALE * 2.0;
+    let player_pos = pose.player;
 
     let vis = build_visual(player.0.creature_type(), BATTLE_CREATURE_SCALE, &mut meshes, &mut materials);
     let player_root = commands.spawn((
@@ -56,9 +54,8 @@ pub fn setup_battle(
 pub fn teardown_battle(
     mut commands: Commands,
     mut session: ResMut<BattleSession>,
-    mut orbit: ResMut<OrbitState>,
 ) {
-    if let Some(saved) = session.saved_orbit.take() { *orbit = saved; }
+    // No camera restore needed — the chase camera resumes next frame.
     for e in session.view_entities.drain(..) {
         commands.entity(e).despawn_recursive();
     }

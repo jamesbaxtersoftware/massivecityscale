@@ -144,7 +144,7 @@ mod tests {
             Transform::from_xyz(1000.0, 0.0, 0.0),
             GlobalTransform::default(),
             PlanetType(CreatureType::Fire),
-            CelestialBody { radius: 200.0, pivot_offset: Vec3::ZERO },
+            CelestialBody { radius: 200.0 },
         )).id();
 
         app.world_mut().run_system_once(spawn_wild_monsters).unwrap();

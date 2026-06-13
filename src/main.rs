@@ -13,6 +13,7 @@ use camera::CameraPlugin;
 use lod::LodPlugin;
 use renderer::RendererPlugin;
 use creatures::CreaturesPlugin;
+use flight::FlightPlugin;
 
 fn main() {
     App::new()
@@ -31,6 +32,7 @@ fn main() {
         .add_plugins(LodPlugin)
         .add_plugins(RendererPlugin)
         .add_plugins(CreaturesPlugin)
+        .add_plugins(FlightPlugin)
         .add_systems(Startup, spawn_light)
         .add_systems(Update, quit_on_escape)
         .run();

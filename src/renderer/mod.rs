@@ -23,10 +23,8 @@ impl Plugin for RendererPlugin {
             buildings::spawn_street_buildings,
             terrain::spawn_sphere_continents,
         ).chain())
-        .init_resource::<solar::ClickTracker>()
         .add_systems(Update, solar::orbit_bodies.run_if(not(in_state(crate::creatures::GameState::Battle))))
-        .add_systems(Update, solar::center_starfield_on_camera)
-        .add_systems(Update, solar::pick_planet.run_if(in_state(crate::creatures::GameState::Exploring)));
+        .add_systems(Update, solar::center_starfield_on_camera);
     }
 }
 
@@ -41,10 +39,9 @@ fn spawn_planet_root(mut commands: Commands) {
         GlobalTransform::default(),
         orbit,
         solar::HomePlanet,
-        solar::CelestialBody { radius: 350.0, pivot_offset: Vec3::new(0.0, -350.0, 0.0) },
+        solar::CelestialBody { radius: 350.0 },
     )).id();
     commands.insert_resource(PlanetRootEntity(id));
-    commands.insert_resource(solar::ActivePlanet { entity: id });
 }
 
 #[cfg(test)]

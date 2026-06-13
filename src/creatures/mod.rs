@@ -1,5 +1,4 @@
 pub mod spawn;
-pub mod pick;
 pub mod starter;
 pub mod battle;
 pub mod battle_view;
@@ -113,8 +112,6 @@ pub struct BattleSession {
     /// Entities spawned only for the battle view (player creature, HP bars),
     /// despawned on teardown.
     pub view_entities: Vec<Entity>,
-    /// Snapshot of camera framing to restore when the battle ends.
-    pub saved_orbit: Option<crate::camera::zoom::OrbitState>,
     pub player_hp: i32,
     pub wild_hp: i32,
 }
@@ -125,7 +122,6 @@ impl BattleSession {
             wild_entity,
             turn: Turn::Player,
             view_entities: Vec::new(),
-            saved_orbit: None,
             player_hp: 0,
             wild_hp: 0,
         }
@@ -258,7 +254,6 @@ impl Plugin for CreaturesPlugin {
            .add_systems(OnEnter(GameState::StarterSelect), starter::spawn_starters)
            .add_systems(OnExit(GameState::StarterSelect), starter::despawn_starters)
            .add_systems(Update, starter::pick_starter.run_if(in_state(GameState::StarterSelect)))
-           .add_systems(Update, pick::pick_wild_monster.run_if(in_state(GameState::Exploring)))
            .insert_resource(battle::BattleRng(rand_chacha::ChaCha8Rng::seed_from_u64(0x_B47_71E)))
            .add_systems(OnEnter(GameState::Battle), battle::setup_battle)
            .add_systems(OnExit(GameState::Battle), battle::teardown_battle)

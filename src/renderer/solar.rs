@@ -1,14 +1,11 @@
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
-use bevy::window::PrimaryWindow;
-use bevy::input::mouse::MouseMotion;
 use rand::SeedableRng;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use crate::lod::LodRange;
 use crate::renderer::scale_consts::LOD_SOLAR;
-use crate::camera::zoom::OrbitState;
 use crate::creatures::{PlanetType, type_from_color};
 
 const N_STARS: usize       = 4_000;
@@ -31,28 +28,10 @@ pub struct HomePlanet;
 #[derive(Component)]
 pub struct StarSphere;
 
-/// Sphere data used for click-to-select raycasting.
+/// Sphere data used for distance-based zoom and battle framing.
 #[derive(Component)]
 pub struct CelestialBody {
-    pub radius:       f32,
-    pub pivot_offset: Vec3, // offset from entity translation to camera orbit pivot
-}
-
-/// Which planet the camera currently orbits.
-#[derive(Resource)]
-pub struct ActivePlanet {
-    pub entity: Entity,
-}
-
-/// Tracks drag distance while the left mouse button is held so that a drag-to-orbit
-/// is not misinterpreted as a click.
-#[derive(Resource, Default)]
-pub struct ClickTracker {
-    drag_sq: f32,
-}
-
-impl ClickTracker {
-    pub fn drag_sq(&self) -> f32 { self.drag_sq }
+    pub radius: f32,
 }
 
 #[derive(Component)]
@@ -91,17 +70,11 @@ impl OrbitalBody {
 
 pub fn orbit_bodies(
     time: Res<Time>,
-    mut query: Query<(Entity, &mut Transform, &mut OrbitalBody, Option<&CelestialBody>)>,
-    mut orbit_state: ResMut<OrbitState>,
-    active: Res<ActivePlanet>,
+    mut query: Query<(&mut Transform, &mut OrbitalBody)>,
 ) {
-    for (entity, mut transform, mut orbit, body) in &mut query {
+    for (mut transform, mut orbit) in &mut query {
         orbit.angle += orbit.speed * time.delta_secs();
-        let pos = orbit.position();
-        transform.translation = pos;
-        if entity == active.entity {
-            orbit_state.pivot = pos + body.map_or(Vec3::ZERO, |b| b.pivot_offset);
-        }
+        transform.translation = orbit.position();
     }
 }
 
@@ -180,7 +153,7 @@ pub fn spawn_solar_system(
             MeshMaterial3d(mat),
             Transform::from_translation(pos),
             orbit,
-            CelestialBody { radius: p.sphere_radius, pivot_offset: Vec3::ZERO },
+            CelestialBody { radius: p.sphere_radius },
             PlanetType(type_from_color(p.color)),
             LodRange { min_scale: LOD_SOLAR.0, max_scale: LOD_SOLAR.1 },
             Visibility::Hidden,
@@ -287,68 +260,6 @@ pub fn spawn_starfield(
         LodRange { min_scale: LOD_STARS.0, max_scale: LOD_STARS.1 },
         Visibility::Hidden,
     ));
-}
-
-// ── Planet selection ──────────────────────────────────────────────────────────
-// Single click on any planet switches the camera orbit target to that planet.
-// A drag (> 5 px movement) is treated as an orbit gesture, not a click.
-
-pub fn pick_planet(
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    mut motion:    EventReader<MouseMotion>,
-    windows:       Query<&Window, With<PrimaryWindow>>,
-    proj_query:    Query<&Projection, With<Camera3d>>,
-    bodies:        Query<(Entity, &GlobalTransform, &CelestialBody)>,
-    mut active:    ResMut<ActivePlanet>,
-    mut orbit:     ResMut<OrbitState>,
-    mut tracker:   ResMut<ClickTracker>,
-) {
-    if mouse_buttons.just_pressed(MouseButton::Left) {
-        tracker.drag_sq = 0.0;
-    }
-    if mouse_buttons.pressed(MouseButton::Left) {
-        for ev in motion.read() {
-            tracker.drag_sq += ev.delta.length_squared();
-        }
-    } else {
-        motion.clear();
-    }
-
-    if !mouse_buttons.just_released(MouseButton::Left) { return; }
-    if tracker.drag_sq > 25.0 { return; } // was a drag, not a click
-
-    let Ok(proj)       = proj_query.get_single() else { return };
-    let Projection::Orthographic(ortho) = proj else { return };
-    let Ok(window)     = windows.get_single() else { return };
-    let Some((ray_o, forward)) = crate::creatures::pick::ortho_pick_ray(window, ortho.scale, &orbit) else { return };
-
-    // cam_pos is still needed below to recompute orbit angles after picking
-    let cam_pos = orbit.camera_pos();
-
-    // Ray-sphere test against all selectable bodies; pick the nearest hit
-    let mut best: Option<(Entity, Vec3, f32)> = None;
-    for (entity, gtransform, body) in &bodies {
-        let center = gtransform.translation() + body.pivot_offset;
-        if let Some(t) = crate::creatures::pick::ray_sphere_t(ray_o, forward, center, body.radius) {
-            if best.map_or(true, |(_, _, bt)| t < bt) {
-                best = Some((entity, center, t));
-            }
-        }
-    }
-
-    let Some((entity, center, _)) = best else { return };
-    if active.entity == entity { return; } // already active, nothing to do
-
-    active.entity = entity;
-
-    // Recompute orbit angles from current camera position so the camera doesn't jump
-    let offset = cam_pos - center;
-    let dist   = offset.length();
-    const MAX_EL: f32 = std::f32::consts::FRAC_PI_2 - 0.1;
-    orbit.pivot     = center;
-    orbit.distance  = dist;
-    orbit.elevation = (offset.y / dist).asin().clamp(-MAX_EL, MAX_EL);
-    orbit.azimuth   = offset.x.atan2(offset.z);
 }
 
 // ── Star follow ───────────────────────────────────────────────────────────────
