@@ -4,6 +4,7 @@ mod camera;
 mod lod;
 mod renderer;
 mod creatures;
+mod flight;
 
 use bevy::prelude::*;
 use world_gen::WorldGenPlugin;
