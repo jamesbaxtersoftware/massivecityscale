@@ -14,7 +14,7 @@ pub const THRUST_ACCEL: f32     = 80.0;  // km/s^2
 pub const STRAFE_ACCEL: f32     = 50.0;  // km/s^2
 pub const DRAG_HALF_LIFE: f32   = 0.7;   // s
 pub const TURN_RATE: f32        = 1.2;   // rad/s at full cursor offset
-pub const ROLL_RATE: f32        = 1.5;   // rad/s while strafing
+pub const STEER_DEADZONE: f32   = 0.08;  // normalized cursor radius treated as centre
 pub const SHIP_RADIUS: f32      = 10.0;  // km
 pub const PLANET_MARGIN: f32    = 12.0;  // km clearance kept outside a planet
 pub const CAM_BACK: f32         = 60.0;  // km behind ship
@@ -31,6 +31,14 @@ pub struct PlayerShip {
 
 #[derive(Component, Default)]
 pub struct ShipVelocity(pub Vec3);
+
+/// Ship facing as explicit yaw/pitch so steering never accumulates roll and
+/// "up stays up". Rebuilt into the transform each frame via `ship_rotation`.
+#[derive(Component, Default)]
+pub struct ShipControl {
+    pub yaw: f32,
+    pub pitch: f32,
+}
 
 // ── Resources ──────────────────────────────────────────────────────────────
 

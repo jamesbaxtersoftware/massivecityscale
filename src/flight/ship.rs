@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use super::{PlayerShip, ShipVelocity, SHIP_RADIUS};
+use super::{PlayerShip, ShipVelocity, ShipControl, SHIP_RADIUS};
 
 /// Spawn the player ship near the home planet if one does not already exist.
 /// A dart body (cone) with an emissive engine-glow accent behind it.
@@ -35,6 +35,7 @@ pub fn spawn_ship(
     commands.spawn((
         PlayerShip { radius: SHIP_RADIUS },
         ShipVelocity::default(),
+        ShipControl::default(), // yaw=0, pitch=0 → faces -Z, upright
         Transform::from_translation(start).looking_to(Vec3::NEG_Z, Vec3::Y),
         GlobalTransform::default(),
         Visibility::Visible,

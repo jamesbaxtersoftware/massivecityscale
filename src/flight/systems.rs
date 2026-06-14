@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use super::physics::{integrate_velocity, clamp_to_planet, spheres_overlap};
+use super::physics::{integrate_velocity, clamp_to_planet, spheres_overlap, steer, ship_rotation};
 use super::{
-    PlayerShip, ShipVelocity, CollisionCooldown,
+    PlayerShip, ShipVelocity, ShipControl, CollisionCooldown,
     BASE_MAX_SPEED, BOOST_MULT, THRUST_ACCEL, STRAFE_ACCEL, DRAG_HALF_LIFE,
-    TURN_RATE, ROLL_RATE, PLANET_MARGIN,
+    TURN_RATE, STEER_DEADZONE, PLANET_MARGIN,
     CAM_BACK, CAM_UP, CAM_LOOKAHEAD, CAM_SMOOTH_HALF_LIFE,
 };
 use crate::camera::zoom::{ZoomLevel, zoom_value_from_distance};
@@ -12,27 +12,31 @@ use crate::renderer::solar::CelestialBody;
 use crate::creatures::{WildMonster, ClickSphere, GameState, BattleSession};
 
 /// Mouse steers (cursor offset from screen centre), W/S thrust, A/D strafe,
-/// hold E boosts. Updates ship facing and `ShipVelocity`.
+/// hold E boosts. Facing is tracked as yaw/pitch and rebuilt each frame so the
+/// ship never rolls — up stays up, down stays down.
 pub fn flight_input(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut ship_q: Query<(&mut Transform, &mut ShipVelocity), With<PlayerShip>>,
+    mut ship_q: Query<(&mut Transform, &mut ShipVelocity, &mut ShipControl), With<PlayerShip>>,
 ) {
     let dt = time.delta_secs();
-    let Ok((mut tf, mut vel)) = ship_q.get_single_mut() else { return };
+    let Ok((mut tf, mut vel, mut ctl)) = ship_q.get_single_mut() else { return };
 
-    // Mouse steering: normalized cursor offset from centre in [-1, 1].
+    // Mouse steering: normalized cursor offset from centre (right=+x, down=+y),
+    // with a small deadzone so the ship flies straight near centre.
     if let Ok(window) = windows.get_single() {
         if let Some(cursor) = window.cursor_position() {
             let half = Vec2::new(window.width(), window.height()) * 0.5;
-            let off = (cursor - half) / half; // y down in screen space
-            let yaw = -off.x * TURN_RATE * dt;
-            let pitch = -off.y * TURN_RATE * dt; // cursor down → pitch down
-            tf.rotate_local_y(yaw);
-            tf.rotate_local_x(pitch);
+            let mut off = (cursor - half) / half;
+            if off.length() < STEER_DEADZONE { off = Vec2::ZERO; }
+            let (yaw, pitch) = steer(ctl.yaw, ctl.pitch, off, TURN_RATE, dt);
+            ctl.yaw = yaw;
+            ctl.pitch = pitch;
         }
     }
+    // Rebuild rotation from yaw/pitch (no accumulated roll).
+    tf.rotation = ship_rotation(ctl.yaw, ctl.pitch);
 
     let boosting = keys.pressed(KeyCode::KeyE);
     let max_speed = if boosting { BASE_MAX_SPEED * BOOST_MULT } else { BASE_MAX_SPEED };
@@ -43,8 +47,8 @@ pub fn flight_input(
     let mut accel = Vec3::ZERO;
     if keys.pressed(KeyCode::KeyW) { accel += fwd * thrust_mag; }
     if keys.pressed(KeyCode::KeyS) { accel -= fwd * thrust_mag; }
-    if keys.pressed(KeyCode::KeyD) { accel += right * STRAFE_ACCEL; tf.rotate_local_z(-ROLL_RATE * dt); }
-    if keys.pressed(KeyCode::KeyA) { accel -= right * STRAFE_ACCEL; tf.rotate_local_z(ROLL_RATE * dt); }
+    if keys.pressed(KeyCode::KeyD) { accel += right * STRAFE_ACCEL; }
+    if keys.pressed(KeyCode::KeyA) { accel -= right * STRAFE_ACCEL; }
 
     vel.0 = integrate_velocity(vel.0, accel, DRAG_HALF_LIFE, max_speed, dt);
 }
@@ -77,9 +81,10 @@ pub fn chase_camera(
     let Ok(ship) = ship_q.get_single() else { return };
     let Ok(mut cam) = cam_q.get_single_mut() else { return };
 
+    // Sit behind the ship along its forward axis, lifted by WORLD up so the
+    // camera is always upright regardless of pitch. Look slightly ahead.
     let fwd = ship.forward().as_vec3();
-    let up = ship.up().as_vec3();
-    let target = ship.translation - fwd * CAM_BACK + up * CAM_UP;
+    let target = ship.translation - fwd * CAM_BACK + Vec3::Y * CAM_UP;
     let look = ship.translation + fwd * CAM_LOOKAHEAD;
 
     let t = 1.0 - 0.5_f32.powf(time.delta_secs() / CAM_SMOOTH_HALF_LIFE.max(1e-6));
