@@ -14,8 +14,8 @@ const STAR_SIZE_MIN: f32   = 12.0;     // km — looks like 1-2 px at solar zoom
 const STAR_SIZE_MAX: f32   = 35.0;
 const LOD_STARS: (f32, f32) = (1.5, 20.0); // appear from mid-zoom outward
 
-// ω = KEPLER_K / radius^1.5  (50% slower than original 18 730)
-const KEPLER_K: f32 = 9_365.0;
+// ω = KEPLER_K / radius^1.5  (1000× slower than the previous 9 365)
+const KEPLER_K: f32 = 9.365;
 const SUN_POS: Vec3 = Vec3::new(-5000.0, 0.0, 0.0);
 
 // ── Orbital body component ────────────────────────────────────────────────────
