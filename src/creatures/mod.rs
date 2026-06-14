@@ -255,11 +255,18 @@ impl Plugin for CreaturesPlugin {
            .add_systems(OnExit(GameState::StarterSelect), starter::despawn_starters)
            .add_systems(Update, starter::pick_starter.run_if(in_state(GameState::StarterSelect)))
            .insert_resource(battle::BattleRng(rand_chacha::ChaCha8Rng::seed_from_u64(0x_B47_71E)))
-           .add_systems(OnEnter(GameState::Battle), battle::setup_battle)
-           .add_systems(OnExit(GameState::Battle), battle::teardown_battle)
+           .add_systems(OnEnter(GameState::Battle), (
+               battle::setup_battle,
+               battle_view::spawn_battle_hud,
+           ).chain())
+           .add_systems(OnExit(GameState::Battle), (
+               battle::teardown_battle,
+               battle_view::despawn_battle_hud,
+           ))
            .add_systems(Update, (
                battle_view::billboard_hp_bars,
                battle_view::update_hp_bars,
+               battle_view::update_battle_hud,
            ).run_if(in_state(GameState::Battle)))
            .add_systems(Update, (
                battle::battle_input,

@@ -1,7 +1,96 @@
 use bevy::prelude::*;
+use super::{BattleSession, PlayerCreature, Creature, WildMonster, Inventory, Turn};
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum BattleSide { Player, Wild }
+
+// ── Battle HUD / move menu ──────────────────────────────────────────────────
+
+/// Root of the battle menu overlay; despawned on battle exit.
+#[derive(Component)]
+pub struct BattleHud;
+
+/// The dynamic status line (HP totals, whose turn, force-field count).
+#[derive(Component)]
+pub struct BattleStatusText;
+
+/// Spawn a bottom-anchored menu the moment a battle starts: a title, a live
+/// status line, and the move controls.
+pub fn spawn_battle_hud(
+    mut commands: Commands,
+    player: Res<PlayerCreature>,
+    session: Res<BattleSession>,
+    wild_q: Query<&Creature, With<WildMonster>>,
+) {
+    let moves = player.0.species.moves();
+    let (wild_name, wild_level) = wild_q
+        .get(session.wild_entity)
+        .map(|c| (c.species.name(), c.level))
+        .unwrap_or(("Wild", 0));
+
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(0.0),
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            row_gap: Val::Px(8.0),
+            padding: UiRect::all(Val::Px(18.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.02, 0.02, 0.06, 0.8)),
+        BattleHud,
+    )).with_children(|root| {
+        root.spawn((
+            Text::new(format!("A wild {wild_name} (Lv {wild_level}) blocks your path!")),
+            TextFont { font_size: 26.0, ..default() },
+            TextColor(Color::WHITE),
+        ));
+        root.spawn((
+            Text::new(String::new()),
+            TextFont { font_size: 20.0, ..default() },
+            TextColor(Color::srgb(0.7, 0.95, 0.8)),
+            BattleStatusText,
+        ));
+        root.spawn((
+            Text::new(format!(
+                "[1] {}     [2] {}     [F] Throw Force Field",
+                moves[0].name, moves[1].name,
+            )),
+            TextFont { font_size: 22.0, ..default() },
+            TextColor(Color::srgb(0.8, 0.85, 1.0)),
+        ));
+    });
+}
+
+/// Refresh the status line each frame with live HP, force fields, and turn.
+pub fn update_battle_hud(
+    session: Res<BattleSession>,
+    player: Res<PlayerCreature>,
+    inventory: Res<Inventory>,
+    wild_q: Query<&Creature, With<WildMonster>>,
+    mut text_q: Query<&mut Text, With<BattleStatusText>>,
+) {
+    let wild_max = wild_q.get(session.wild_entity).map(|c| c.max_hp).unwrap_or(1).max(1);
+    let turn = match session.turn {
+        Turn::Player => "Your move",
+        Turn::Enemy  => "Enemy attacking...",
+    };
+    for mut text in &mut text_q {
+        *text = Text::new(format!(
+            "You {}/{} HP    Wild {}/{} HP    Force Fields: {}    —  {}",
+            session.player_hp.max(0), player.0.max_hp,
+            session.wild_hp.max(0), wild_max,
+            inventory.force_fields, turn,
+        ));
+    }
+}
+
+/// Despawn the battle menu when the battle ends.
+pub fn despawn_battle_hud(mut commands: Commands, roots: Query<Entity, With<BattleHud>>) {
+    for e in &roots { commands.entity(e).despawn_recursive(); }
+}
 
 #[derive(Component)]
 pub struct HpBar { pub side: BattleSide }
