@@ -42,6 +42,16 @@ fn main() {
                 .before(ship::systems::ship_move),
         );
     }
+    // DEV turn test: hold position and yaw left, then right, capturing the view at
+    // each so the steering direction can be checked. Gated by GR_TURN=<prefix>.
+    if std::env::var("GR_TURN").is_ok() {
+        app.add_systems(
+            Update,
+            dev_turn_test
+                .after(ship::systems::flight_input)
+                .before(ship::systems::ship_move),
+        );
+    }
 
     app.run();
 }
@@ -132,6 +142,52 @@ fn dev_autopilot(
         *shot_idx += 1;
     }
     if *shot_idx >= thresholds.len() || *frame > 4000 {
+        exit.send(AppExit::Success);
+    }
+}
+
+/// DEV turn test: keep the ship stationary and swing its heading left, back to
+/// centre, then right, capturing each once the chase camera has settled. Lets us
+/// confirm left/right steering pans the view the correct way. Gated by GR_TURN.
+fn dev_turn_test(
+    mut frame: Local<u32>,
+    mut commands: Commands,
+    mut ship: Query<(&mut ship::ShipVelocity, &mut ship::ShipControl, &mut Transform), With<ship::PlayerShip>>,
+    mut exit: EventWriter<AppExit>,
+) {
+    use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+    let f = *frame;
+    *frame += 1;
+
+    let Ok((mut vel, mut ctl, mut tf)) = ship.get_single_mut() else { return };
+    vel.0 = Vec3::ZERO; // hover in place
+
+    // Yaw schedule (positive yaw faces -X = left; negative faces +X = right).
+    // Long holds so the smoothed chase camera fully settles before each capture.
+    let yaw = if f < 90 {
+        0.0
+    } else if f < 240 {
+        0.7 // turned LEFT
+    } else if f < 390 {
+        0.0
+    } else {
+        -0.7 // turned RIGHT
+    };
+    ctl.yaw = yaw;
+    ctl.pitch = 0.0;
+    tf.rotation = ship::physics::ship_rotation(yaw, 0.0);
+
+    let prefix = std::env::var("GR_TURN").unwrap_or_else(|_| "/tmp/turn".into());
+    let shots = [(80u32, "0_forward"), (230, "1_left"), (380, "2_forward"), (520, "3_right")];
+    for (at, name) in shots {
+        if f == at {
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(format!("{prefix}_{name}.png")));
+            eprintln!("TURN shot {name} at frame {f}, yaw={yaw:.2}");
+        }
+    }
+    if f >= 560 {
         exit.send(AppExit::Success);
     }
 }
