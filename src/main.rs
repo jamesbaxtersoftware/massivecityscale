@@ -14,6 +14,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(origin::OriginPlugin)
+        .add_plugins(ship::ShipPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         .add_systems(Startup, setup)
         .add_systems(Update, quit_on_escape)
@@ -21,10 +22,6 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    commands.spawn((
-        Camera3d::default(),
-        Transform::from_xyz(0.0, 50.0, 200.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
     commands.spawn((
         DirectionalLight { illuminance: 10_000.0, shadows_enabled: false, ..default() },
         Transform::from_xyz(1.0, 2.0, 1.0).looking_at(Vec3::ZERO, Vec3::Y),
