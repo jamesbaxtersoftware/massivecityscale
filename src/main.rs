@@ -4,6 +4,7 @@ mod galaxy;
 mod origin;
 mod palette;
 mod pause;
+mod pixelate;
 mod ship;
 mod streaming;
 mod terrain;
@@ -24,6 +25,7 @@ fn main() {
         .add_plugins(streaming::StreamingPlugin)
         .add_plugins(terrain::TerrainPlugin)
         .add_plugins(pause::PauseMenuPlugin)
+        .add_plugins(pixelate::PixelatePlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         .add_systems(Startup, setup);
 

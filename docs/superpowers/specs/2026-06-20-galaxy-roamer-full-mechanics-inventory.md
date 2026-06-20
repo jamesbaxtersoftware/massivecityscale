@@ -166,8 +166,9 @@ decision (D3) — the reference UI is gamepad-style.
 
 52. 🔴 **Wild creatures roam the surface.**
 53. 🔴 **Encounter trigger** (approach).
-54. ⚠️ **Battle model** — original brief said turn-based; reference looks
-    action/real-time catch. Decide.
+54. ✅DECISION **Battle model = turn-based, in-world 3D framing** (carry v1's proven
+    type-matchup/damage combat; capture via Disc with weaken-based %). Real-time
+    action noted as a future option.
 55. 🔴 **Type system & matchups** (Fire/Water/Rock/…).
 56. 🔴 **Damage / HP / weaken-to-catch.**
 57. 🔴 **Creature stats** — HP, SP, level, moves.

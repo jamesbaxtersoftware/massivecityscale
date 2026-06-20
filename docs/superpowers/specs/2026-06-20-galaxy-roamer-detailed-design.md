@@ -163,8 +163,11 @@ Status: ✅ done · 🟡 partial · 🔴 not started · ⚠️ rework.
 ## 8. Creatures — encounter & battle
 
 - **52. Wild creatures roam** 🔴 — spawn per biome on the surface, simple wander AI.
-  **53. Encounter trigger (C16)** 🔴 — approach → enter Battle state. **54. Battle model**
-  ⚠️ — **decide turn-based vs action**; reference looks action (weaken then throw).
+  **53. Encounter trigger (C16)** 🔴 — approach → enter Battle state. **54. Battle model = turn-based, in-world 3D framing** ✅DECISION — carry v1's proven
+  turn-based combat (move menu, type matchups, deterministic) with billboarded HP
+  bars; the capture (weaken → throw Disc → % ring) is the reference moment. Chosen
+  for fidelity to the brief and because it's fully self-verifiable via tests; pure
+  real-time action is a noted future option.
   **55. Type matchups** 🔴 (Fire/Water/Rock/… multiplier table). **56. Damage/weaken** 🔴.
   **57. Creature stats** 🔴 (HP/SP/level/moves). **58. Enemy AI** 🔴. **59. In-world HP
   bars** 🔴 (billboarded).
