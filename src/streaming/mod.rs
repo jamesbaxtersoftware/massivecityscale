@@ -21,7 +21,9 @@ pub struct LodThresholds {
 
 impl Default for LodThresholds {
     fn default() -> Self {
-        Self { cull: 3_000_000.0, sphere: 8_000.0, terrain: 120.0 }
+        // Surface-distance thresholds in metres: show a sphere within ~50,000 km,
+        // resolve terrain within ~2,000 km of the surface, cull only very far away.
+        Self { cull: 5.0e9, sphere: 5.0e7, terrain: 2.0e6 }
     }
 }
 
@@ -79,10 +81,10 @@ mod tests {
     #[test]
     fn tiers_step_in_by_distance() {
         let t = LodThresholds::default();
-        assert_eq!(tier_for_distance(5_000_000.0, &t), LodTier::Culled);
-        assert_eq!(tier_for_distance(50_000.0, &t), LodTier::Point);
-        assert_eq!(tier_for_distance(1_000.0, &t), LodTier::Sphere);
-        assert_eq!(tier_for_distance(10.0, &t), LodTier::Terrain);
+        assert_eq!(tier_for_distance(1.0e10, &t), LodTier::Culled); // beyond cull
+        assert_eq!(tier_for_distance(1.0e8, &t), LodTier::Point); // far in-system
+        assert_eq!(tier_for_distance(1.0e7, &t), LodTier::Sphere); // approaching
+        assert_eq!(tier_for_distance(1.0e5, &t), LodTier::Terrain); // near surface
     }
 
     #[test]

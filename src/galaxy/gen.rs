@@ -4,8 +4,9 @@ use rand_chacha::ChaCha8Rng;
 
 /// Number of distant backdrop stars (LOD point tier). Slice budget, not galaxy scale.
 pub const BACKDROP_STARS: usize = 500;
-/// Backdrop stars are scattered in a cube of this half-extent (km).
-pub const BACKDROP_HALF_EXTENT: f64 = 2_000_000.0;
+/// Backdrop stars scatter in a cube of this half-extent (metres) — a far backdrop
+/// (2 million km) so they read as fixed points.
+pub const BACKDROP_HALF_EXTENT: f64 = 2.0e9;
 /// Number of nearby star systems the player can approach.
 pub const SYSTEMS: usize = 3;
 
@@ -59,31 +60,32 @@ pub fn generate(seed: u64) -> GalaxyData {
 
     let mut planets = Vec::new();
     for s in 0..SYSTEMS {
-        // The first system sits dead ahead of the player's start (facing -Z) so
-        // there's something to fly toward immediately; later systems scatter wider.
+        // Distances in metres. First system sits ~40,000 km dead ahead so there's
+        // something to fly toward immediately; later systems scatter further out.
         let center = if s == 0 {
             DVec3::new(
-                rng.gen_range(-600.0..600.0),
-                rng.gen_range(-300.0..300.0),
-                -5_000.0,
+                rng.gen_range(-6.0e6..6.0e6),
+                rng.gen_range(-3.0e6..3.0e6),
+                -4.0e7,
             )
         } else {
             DVec3::new(
-                rng.gen_range(-3_000.0..3_000.0),
-                rng.gen_range(-1_000.0..1_000.0),
-                -4_000.0 - s as f64 * 6_000.0,
+                rng.gen_range(-3.0e7..3.0e7),
+                rng.gen_range(-1.0e7..1.0e7),
+                -4.0e7 - s as f64 * 6.0e7,
             )
         };
         let n = rng.gen_range(1..=3);
         for _p in 0..n {
             let offset = DVec3::new(
-                rng.gen_range(-1_500.0..1_500.0),
-                rng.gen_range(-400.0..400.0),
-                rng.gen_range(-1_500.0..1_500.0),
+                rng.gen_range(-1.5e7..1.5e7),
+                rng.gen_range(-4.0e6..4.0e6),
+                rng.gen_range(-1.5e7..1.5e7),
             );
             planets.push(Planet {
+                // Planet radius 2,000–6,000 km (vs a ~30 m ship).
                 pos: center + offset,
-                radius: rng.gen_range(200.0..500.0),
+                radius: rng.gen_range(2.0e6..6.0e6),
                 kind: planet_type(&mut rng),
             });
         }
@@ -117,6 +119,21 @@ mod tests {
         let a = generate(1);
         let b = generate(2);
         assert!(a.stars[0].pos != b.stars[0].pos, "seed changes the starfield");
+    }
+
+    #[test]
+    fn scale_sanity_planets_are_world_sized_vs_ship() {
+        // Ship is ~30 m; planets must be thousands of km (millions of m), i.e.
+        // at least ~10,000x the ship — fixing the old inverted ratio.
+        const SHIP_LEN_M: f64 = 30.0;
+        for p in generate(42).planets {
+            assert!(
+                (2.0e6..=6.0e6).contains(&p.radius),
+                "planet radius {} m out of intended 2,000-6,000 km band",
+                p.radius
+            );
+            assert!(p.radius / SHIP_LEN_M > 10_000.0, "planet dwarfs the ship");
+        }
     }
 
     #[test]

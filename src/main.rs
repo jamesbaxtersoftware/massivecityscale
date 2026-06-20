@@ -82,7 +82,7 @@ fn dev_screenshot(
         // descent shot). Otherwise leave it at the spawn for a start shot.
         if let Ok(idx) = std::env::var("GR_NEAR").and_then(|s| s.parse::<usize>().map_err(|_| std::env::VarError::NotPresent)) {
             if let (Some(p), Ok(mut wp)) = (g.planets.get(idx), ship.get_single_mut()) {
-                wp.0 = p.pos + bevy::math::DVec3::new(0.0, 0.0, p.radius + 90.0);
+                wp.0 = p.pos + bevy::math::DVec3::new(0.0, 0.0, p.radius + 60_000.0);
             }
         }
         for (i, p) in g.planets.iter().enumerate() {
@@ -137,13 +137,13 @@ fn dev_autopilot(
     let dir = (ppos - swp.0).as_vec3().normalize_or_zero();
     let (yaw, pitch) = ship::physics::look_yaw_pitch(dir);
     tf.rotation = ship::physics::ship_rotation(yaw, pitch);
-    // Fast while far, gentle on final approach so the slide-collision settles.
-    let speed = if surf > 400.0 { 1000.0 } else { 120.0 };
+    // Fast while far, gentle on final approach so the slide-collision settles (m/s).
+    let speed = if surf > 2.0e6 { 4.0e6 } else { 2.0e5 };
     vel.0 = dir * speed;
 
-    // Capture by surface distance (framerate-independent): far → descent → landed.
+    // Capture by surface distance in metres (framerate-independent): far→descent→landed.
     let prefix = std::env::var("GR_FLY").unwrap_or_else(|_| "/tmp/fly".into());
-    let thresholds = [3000.0, 1500.0, 600.0, 250.0, 110.0, 30.0];
+    let thresholds = [3.0e7, 1.0e7, 3.0e6, 1.0e6, 3.0e5, 5.0e4];
     while *shot_idx < thresholds.len() && surf <= thresholds[*shot_idx] {
         commands
             .spawn(Screenshot::primary_window())

@@ -15,11 +15,11 @@ pub fn spawn_ship(
     // like a craft than a cube. Forward is -Z, so the engine sits at +Z (rear).
     commands
         .spawn((
-            PlayerShip { radius: 10.0 },
+            PlayerShip { radius: 20.0 }, // ~30 m ship, 20 m collision radius
             ShipVelocity::default(),
             ShipControl::default(),
             WorldPos(DVec3::ZERO),
-            Mesh3d(meshes.add(Cuboid::new(7.0, 3.0, 18.0))),
+            Mesh3d(meshes.add(Cuboid::new(12.0, 5.0, 30.0))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::srgb(0.78, 0.83, 0.95),
                 emissive: LinearRgba::rgb(0.05, 0.10, 0.25),
@@ -30,14 +30,14 @@ pub fn spawn_ship(
         .with_children(|ship| {
             // Glowing engine block at the rear.
             ship.spawn((
-                Mesh3d(meshes.add(Cuboid::new(4.0, 2.0, 2.0))),
+                Mesh3d(meshes.add(Cuboid::new(7.0, 3.0, 4.0))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgb(0.3, 0.6, 1.0),
                     emissive: LinearRgba::rgb(0.6, 1.8, 4.0),
                     unlit: true,
                     ..default()
                 })),
-                Transform::from_xyz(0.0, 0.0, 9.5),
+                Transform::from_xyz(0.0, 0.0, 16.0),
             ));
         });
     commands.spawn((

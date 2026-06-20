@@ -24,16 +24,18 @@ pub struct FlightTuning {
 impl Default for FlightTuning {
     fn default() -> Self {
         Self {
-            base_max_speed: 100.0,
+            // Metre scale: cruise ~4,000 km/s so a ~40,000 km hop takes ~10s; boost 10x.
+            base_max_speed: 4.0e6,
             boost_mult: 10.0,
-            thrust_accel: 80.0,
-            strafe_accel: 50.0,
+            thrust_accel: 2.0e6,
+            strafe_accel: 1.0e6,
             drag_half_life: 0.7,
             turn_rate: 1.2,
             steer_deadzone: 0.08,
-            cam_back: 60.0,
-            cam_up: 25.0,
-            cam_lookahead: 80.0,
+            // Camera offsets in metres, framed for a ~30 m ship.
+            cam_back: 70.0,
+            cam_up: 28.0,
+            cam_lookahead: 140.0,
             cam_smooth_half_life: 0.15,
         }
     }
