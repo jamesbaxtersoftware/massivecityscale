@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 mod galaxy;
 mod origin;
+mod palette;
 mod ship;
 
 fn main() {
