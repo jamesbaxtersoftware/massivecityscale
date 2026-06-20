@@ -70,14 +70,28 @@ pub fn flight_input(
     vel.0 = integrate_velocity(vel.0, accel, tune.drag_half_life, max_speed, dt);
 }
 
-/// Integrate the ship's f64 world position from its f32 velocity (km/s).
+/// Integrate the ship's f64 world position from its f32 velocity, then keep it
+/// outside every planet shell (slide, not bounce). Collision math runs in f32
+/// relative to each planet, where the offset is small enough to stay precise.
 pub fn ship_move(
     time: Res<Time>,
-    mut ship_q: Query<(&mut WorldPos, &ShipVelocity), With<PlayerShip>>,
+    planets: Query<(&WorldPos, &crate::galaxy::PlanetBody)>,
+    mut ship_q: Query<(&mut WorldPos, &mut ShipVelocity, &PlayerShip), Without<crate::galaxy::PlanetBody>>,
 ) {
+    use super::physics::clamp_to_planet;
+    const PLANET_MARGIN: f32 = 0.1; // km clearance so the ship can still reach the surface
     let dt = time.delta_secs();
-    let Ok((mut wp, vel)) = ship_q.get_single_mut() else { return };
+    let Ok((mut wp, mut vel, ship)) = ship_q.get_single_mut() else { return };
     wp.0 += (vel.0 * dt).as_dvec3();
+
+    for (planet_wp, body) in &planets {
+        let rel = (wp.0 - planet_wp.0).as_vec3(); // small near the surface
+        let (new_rel, new_vel) = clamp_to_planet(
+            rel, vel.0, Vec3::ZERO, body.radius + ship.radius, PLANET_MARGIN,
+        );
+        wp.0 = planet_wp.0 + new_rel.as_dvec3();
+        vel.0 = new_vel;
+    }
 }
 
 /// Publish the ship's world position as the floating origin, so it renders at
@@ -133,6 +147,28 @@ mod tests {
         app.world_mut().run_system_once(ship_move).unwrap();
         let wp = app.world().get::<WorldPos>(e).unwrap();
         assert!(wp.0.z < 0.0, "ship advanced in -Z world space");
+    }
+
+    #[test]
+    fn ship_move_keeps_ship_outside_planet() {
+        use crate::galaxy::PlanetBody;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        // Planet of radius 300 km at +200 on Z; ship just inside heading inward.
+        app.world_mut().spawn((
+            PlanetBody { radius: 300.0, descendable: true },
+            WorldPos(DVec3::new(0.0, 0.0, 0.0)),
+        ));
+        let ship = app.world_mut().spawn((
+            PlayerShip { radius: 10.0 },
+            ShipVelocity(Vec3::new(0.0, 0.0, -50.0)),
+            WorldPos(DVec3::new(0.0, 0.0, 250.0)),
+        )).id();
+        app.update();
+        app.world_mut().run_system_once(ship_move).unwrap();
+        let wp = app.world().get::<WorldPos>(ship).unwrap();
+        let dist = wp.0.length();
+        assert!(dist >= 300.0 + 10.0 - 1.0, "ship stays outside planet shell (got {dist})");
     }
 
     #[test]
