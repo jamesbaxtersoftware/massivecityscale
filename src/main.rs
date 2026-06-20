@@ -1,66 +1,33 @@
-mod world_gen;
-mod theme;
-mod camera;
-mod lod;
-mod renderer;
-mod creatures;
-mod flight;
-
 use bevy::prelude::*;
-use world_gen::WorldGenPlugin;
-use theme::ThemePlugin;
-use camera::CameraPlugin;
-use lod::LodPlugin;
-use renderer::RendererPlugin;
-use creatures::CreaturesPlugin;
-use flight::FlightPlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "MassiveCityScale".into(),
+                title: "Galaxy Roamer".into(),
                 resolution: (1280.0, 720.0).into(),
                 ..default()
             }),
             ..default()
         }))
-        .insert_resource(ClearColor(theme::themes::dark_neon().background))
-        .add_plugins(WorldGenPlugin)
-        .add_plugins(ThemePlugin)
-        .add_plugins(CameraPlugin)
-        .add_plugins(LodPlugin)
-        .add_plugins(RendererPlugin)
-        .add_plugins(CreaturesPlugin)
-        .add_plugins(FlightPlugin)
-        .add_systems(Startup, spawn_light)
+        .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
+        .add_systems(Startup, setup)
         .add_systems(Update, quit_on_escape)
         .run();
 }
 
-fn spawn_light(mut commands: Commands) {
+fn setup(mut commands: Commands) {
     commands.spawn((
-        DirectionalLight {
-            illuminance: 10_000.0,
-            shadows_enabled: false,
-            ..default()
-        },
-        Transform::from_xyz(1.0, 2.0, 1.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 50.0, 200.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
     commands.spawn((
-        DirectionalLight {
-            illuminance: 3_000.0,
-            shadows_enabled: false,
-            ..default()
-        },
-        Transform::from_xyz(-1.0, 0.5, -1.0).looking_at(Vec3::ZERO, Vec3::Y),
+        DirectionalLight { illuminance: 10_000.0, shadows_enabled: false, ..default() },
+        Transform::from_xyz(1.0, 2.0, 1.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }
 
-fn quit_on_escape(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut exit: EventWriter<AppExit>,
-) {
+fn quit_on_escape(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
     if keys.just_pressed(KeyCode::Escape) {
         exit.send(AppExit::Success);
     }
