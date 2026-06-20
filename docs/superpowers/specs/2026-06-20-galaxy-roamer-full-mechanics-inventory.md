@@ -15,6 +15,19 @@ it a *game* (landing, on-foot, catching, HUD, economy, progression) is unbuilt.
 
 ---
 
+## Decisions (LOCKED 2026-06-20)
+
+- **D1 = 3D + pixel-art post-process.** Keep the 3D engine (preserves floating
+  origin, seamless descent, terrain); add a pixelation post-process + flat/banded
+  shading; sprite-based creatures & UI.
+- **D2 = realistic scale + warp travel.** Planets thousands of km, ship ~30 m; fly
+  in-system, warp/jump across light-years (LY in HUD); fine control near surface.
+- **D3 = keyboard+mouse now, gamepad-ready.** Implement kbd+mouse via an action-map
+  so gamepad is a cheap later add.
+
+Fleshed-out detail with per-feature verification:
+`2026-06-20-galaxy-roamer-detailed-design.md`.
+
 ## 0. Two foundational decisions (block everything else)
 
 - **D1 — Art direction.** ⚠️ Reference is detailed **pixel-art / 2.5D**; current is
