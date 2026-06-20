@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+mod origin;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -10,6 +12,7 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(origin::OriginPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         .add_systems(Startup, setup)
         .add_systems(Update, quit_on_escape)
