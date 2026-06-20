@@ -16,6 +16,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(origin::OriginPlugin)
+        .add_plugins(galaxy::GalaxyPlugin)
         .add_plugins(ship::ShipPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         .add_systems(Startup, setup)
