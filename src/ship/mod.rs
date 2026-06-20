@@ -55,6 +55,10 @@ pub struct ShipControl {
     pub pitch: f32,
 }
 
+/// Marks the engine exhaust plume so it can be stretched by throttle each frame.
+#[derive(Component)]
+pub struct ShipEngine;
+
 pub struct ShipPlugin;
 
 impl Plugin for ShipPlugin {
@@ -66,6 +70,7 @@ impl Plugin for ShipPlugin {
             .add_systems(Update, systems::flight_input.in_set(FrameSet::Input))
             .add_systems(Update, systems::ship_move.in_set(FrameSet::Move))
             .add_systems(Update, systems::set_origin.in_set(FrameSet::Origin))
-            .add_systems(Update, systems::chase_camera.in_set(FrameSet::Camera));
+            .add_systems(Update, systems::chase_camera.in_set(FrameSet::Camera))
+            .add_systems(Update, systems::engine_glow.in_set(FrameSet::Camera));
     }
 }

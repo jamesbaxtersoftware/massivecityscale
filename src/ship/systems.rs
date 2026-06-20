@@ -3,7 +3,7 @@ use bevy::math::DVec3;
 use bevy::window::PrimaryWindow;
 use crate::origin::{WorldPos, FloatingOrigin};
 use super::physics::{steer, ship_rotation, integrate_velocity};
-use super::{FlightTuning, PlayerShip, ShipVelocity, ShipControl};
+use super::{FlightTuning, PlayerShip, ShipEngine, ShipVelocity, ShipControl};
 
 /// Spawn the player ship (a cube) at the world origin, plus its chase camera.
 pub fn spawn_ship(
@@ -11,39 +11,103 @@ pub fn spawn_ship(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Hull: a low, long wedge-ish block (wider and longer than tall) reads more
-    // like a craft than a cube. Forward is -Z, so the engine sits at +Z (rear).
+    // A low-poly craft assembled from primitives (forward = -Z, rear = +Z): hull,
+    // pointed nose, cockpit, swept wings, engine housing, and a glowing plume.
+    let hull_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.78, 0.83, 0.95),
+        emissive: LinearRgba::rgb(0.04, 0.08, 0.18),
+        ..default()
+    });
+    let trim_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.45, 0.50, 0.62),
+        ..default()
+    });
+    let glass_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.15, 0.35, 0.5),
+        emissive: LinearRgba::rgb(0.1, 0.5, 0.8),
+        ..default()
+    });
+    let glow_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.3, 0.6, 1.0),
+        emissive: LinearRgba::rgb(0.6, 1.8, 4.0),
+        unlit: true,
+        ..default()
+    });
     commands
         .spawn((
             PlayerShip { radius: 20.0 }, // ~30 m ship, 20 m collision radius
             ShipVelocity::default(),
             ShipControl::default(),
             WorldPos(DVec3::ZERO),
-            Mesh3d(meshes.add(Cuboid::new(12.0, 5.0, 30.0))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgb(0.78, 0.83, 0.95),
-                emissive: LinearRgba::rgb(0.05, 0.10, 0.25),
-                ..default()
-            })),
             Transform::default(),
+            Visibility::default(),
         ))
         .with_children(|ship| {
-            // Glowing engine block at the rear.
+            // Hull.
             ship.spawn((
-                Mesh3d(meshes.add(Cuboid::new(7.0, 3.0, 4.0))),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.3, 0.6, 1.0),
-                    emissive: LinearRgba::rgb(0.6, 1.8, 4.0),
-                    unlit: true,
-                    ..default()
-                })),
-                Transform::from_xyz(0.0, 0.0, 16.0),
+                Mesh3d(meshes.add(Cuboid::new(9.0, 4.0, 22.0))),
+                MeshMaterial3d(hull_mat.clone()),
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ));
+            // Nose: a cuboid rotated 45° about its long axis reads as a pointed prow.
+            ship.spawn((
+                Mesh3d(meshes.add(Cuboid::new(4.0, 4.0, 10.0))),
+                MeshMaterial3d(trim_mat.clone()),
+                Transform::from_xyz(0.0, 0.0, -15.0)
+                    .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_4)),
+            ));
+            // Cockpit canopy.
+            ship.spawn((
+                Mesh3d(meshes.add(Cuboid::new(4.0, 2.2, 6.0))),
+                MeshMaterial3d(glass_mat.clone()),
+                Transform::from_xyz(0.0, 2.4, -3.0),
+            ));
+            // Swept wings (slight dihedral).
+            for side in [-1.0_f32, 1.0] {
+                ship.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(11.0, 0.8, 8.0))),
+                    MeshMaterial3d(trim_mat.clone()),
+                    Transform::from_xyz(side * 8.5, -0.5, 4.0)
+                        .with_rotation(Quat::from_rotation_z(side * -0.18)),
+                ));
+            }
+            // Engine housing.
+            ship.spawn((
+                Mesh3d(meshes.add(Cuboid::new(7.0, 3.2, 5.0))),
+                MeshMaterial3d(trim_mat.clone()),
+                Transform::from_xyz(0.0, 0.0, 12.0),
+            ));
+            // Glowing exhaust plume — stretched by throttle in `engine_glow`.
+            ship.spawn((
+                ShipEngine,
+                Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+                MeshMaterial3d(glow_mat.clone()),
+                // Sits a touch below the hull line so the plume is visible from the
+                // chase camera; length is driven by throttle in `engine_glow`.
+                Transform::from_xyz(0.0, -1.2, 15.0).with_scale(Vec3::new(4.0, 2.0, 2.0)),
             ));
         });
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 25.0, 60.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
+}
+
+/// Stretch the engine plume by throttle: a small nub at rest, a long flame at
+/// cruise/boost. Front stays at the engine; it grows backward (+Z).
+pub fn engine_glow(
+    tune: Res<FlightTuning>,
+    ship: Query<&ShipVelocity, With<PlayerShip>>,
+    mut plume: Query<&mut Transform, With<ShipEngine>>,
+) {
+    let Ok(vel) = ship.get_single() else { return };
+    let frac = (vel.0.length() / tune.base_max_speed).clamp(0.0, 4.0);
+    let len = 2.0 + frac * 9.0;
+    let width = 1.0 + frac * 0.3;
+    for mut tf in &mut plume {
+        tf.scale = Vec3::new(4.0 * width, 2.0 * width, len);
+        tf.translation.z = 14.0 + len * 0.5;
+    }
 }
 
 /// One-shot: warp the cursor to screen centre so steering starts neutral (in the
