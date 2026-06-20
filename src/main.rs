@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+mod galaxy;
 mod origin;
 mod ship;
 
