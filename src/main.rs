@@ -5,6 +5,7 @@ mod origin;
 mod palette;
 mod ship;
 mod streaming;
+mod terrain;
 
 fn main() {
     App::new()
@@ -20,6 +21,7 @@ fn main() {
         .add_plugins(galaxy::GalaxyPlugin)
         .add_plugins(ship::ShipPlugin)
         .add_plugins(streaming::StreamingPlugin)
+        .add_plugins(terrain::TerrainPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         .add_systems(Startup, setup)
         .add_systems(Update, quit_on_escape)
