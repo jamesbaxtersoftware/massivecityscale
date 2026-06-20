@@ -93,18 +93,41 @@ fn spawn_galaxy(
         ));
     }
 
-    for planet in &data.planets {
-        commands.spawn((
-            PlanetBody { radius: planet.radius as f32 },
-            WorldPos(planet.pos),
-            Mesh3d(meshes.add(Sphere::new(planet.radius as f32).mesh().ico(4).unwrap())),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: planet_color(planet.kind),
-                ..default()
-            })),
-            Transform::default(),
-            LodBody { tier: LodTier::Point },
-        ));
-    }
+    // Shared unit sphere + translucent shell material for atmosphere rims; scaled
+    // per planet via the child Transform so the handle stays shared.
+    let atmo_mesh = meshes.add(Sphere::new(1.0).mesh().ico(4).unwrap());
+    let atmo_mat = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.35, 0.6, 1.0, 0.16),
+        emissive: LinearRgba::rgb(0.15, 0.35, 0.7),
+        unlit: true,
+        alpha_mode: AlphaMode::Blend,
+        // Show the far side of the shell so it reads as a rim halo around the disc.
+        cull_mode: Some(bevy::render::render_resource::Face::Front),
+        ..default()
+    });
 
+    for planet in &data.planets {
+        let r = planet.radius as f32;
+        commands
+            .spawn((
+                PlanetBody { radius: r },
+                WorldPos(planet.pos),
+                Mesh3d(meshes.add(Sphere::new(r).mesh().ico(4).unwrap())),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: planet_color(planet.kind),
+                    ..default()
+                })),
+                Transform::default(),
+                Visibility::default(),
+                LodBody { tier: LodTier::Point },
+            ))
+            .with_children(|p| {
+                // Atmosphere shell ~6% larger than the planet.
+                p.spawn((
+                    Mesh3d(atmo_mesh.clone()),
+                    MeshMaterial3d(atmo_mat.clone()),
+                    Transform::from_scale(Vec3::splat(r * 1.06)),
+                ));
+            });
+    }
 }
