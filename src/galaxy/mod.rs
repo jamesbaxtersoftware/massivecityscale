@@ -5,6 +5,7 @@ pub use gen::{GalaxyData, Planet, PlanetType, Star};
 use bevy::prelude::*;
 use crate::origin::WorldPos;
 use crate::palette::{planet_color, STAR_COLOR};
+use crate::streaming::{LodBody, LodTier};
 
 pub const WORLD_SEED: u64 = 42;
 
@@ -63,6 +64,7 @@ fn spawn_galaxy(
                 ..default()
             })),
             Transform::default(),
+            LodBody { tier: LodTier::Point },
         ));
     }
 
