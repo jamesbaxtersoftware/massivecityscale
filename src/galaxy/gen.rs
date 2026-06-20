@@ -26,7 +26,6 @@ pub struct Planet {
     pub pos: DVec3,
     pub radius: f64,
     pub kind: PlanetType,
-    pub descendable: bool,
 }
 
 pub struct GalaxyData {
@@ -67,7 +66,7 @@ pub fn generate(seed: u64) -> GalaxyData {
             -4_000.0 - s as f64 * 6_000.0,
         );
         let n = rng.gen_range(1..=3);
-        for p in 0..n {
+        for _p in 0..n {
             let offset = DVec3::new(
                 rng.gen_range(-1_500.0..1_500.0),
                 rng.gen_range(-400.0..400.0),
@@ -77,8 +76,6 @@ pub fn generate(seed: u64) -> GalaxyData {
                 pos: center + offset,
                 radius: rng.gen_range(200.0..500.0),
                 kind: planet_type(&mut rng),
-                // The first planet of the first system is the descend target.
-                descendable: s == 0 && p == 0,
             });
         }
     }
@@ -103,7 +100,6 @@ mod tests {
             assert_eq!(x.pos, y.pos);
             assert_eq!(x.radius, y.radius);
             assert_eq!(x.kind, y.kind);
-            assert_eq!(x.descendable, y.descendable);
         }
     }
 
@@ -121,9 +117,4 @@ mod tests {
         assert!(!g.planets.is_empty());
     }
 
-    #[test]
-    fn exactly_one_descendable_planet() {
-        let g = generate(7);
-        assert_eq!(g.planets.iter().filter(|p| p.descendable).count(), 1);
-    }
 }

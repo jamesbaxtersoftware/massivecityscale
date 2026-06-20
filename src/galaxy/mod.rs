@@ -1,7 +1,5 @@
 pub mod gen;
 
-pub use gen::{GalaxyData, Planet, PlanetType, Star};
-
 use bevy::prelude::*;
 use crate::origin::WorldPos;
 use crate::palette::{planet_color, STAR_COLOR};
@@ -9,16 +7,12 @@ use crate::streaming::{LodBody, LodTier};
 
 pub const WORLD_SEED: u64 = 42;
 
-#[derive(Resource)]
-pub struct Galaxy(pub GalaxyData);
-
 #[derive(Component)]
 pub struct StarBody;
 
 #[derive(Component)]
 pub struct PlanetBody {
     pub radius: f32,
-    pub descendable: bool,
 }
 
 pub struct GalaxyPlugin;
@@ -56,7 +50,7 @@ fn spawn_galaxy(
 
     for planet in &data.planets {
         commands.spawn((
-            PlanetBody { radius: planet.radius as f32, descendable: planet.descendable },
+            PlanetBody { radius: planet.radius as f32 },
             WorldPos(planet.pos),
             Mesh3d(meshes.add(Sphere::new(planet.radius as f32).mesh().ico(4).unwrap())),
             MeshMaterial3d(materials.add(StandardMaterial {
@@ -68,5 +62,4 @@ fn spawn_galaxy(
         ));
     }
 
-    commands.insert_resource(Galaxy(data));
 }
