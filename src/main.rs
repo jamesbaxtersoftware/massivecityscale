@@ -32,6 +32,16 @@ fn main() {
     if std::env::var("GR_SHOT").is_ok() {
         app.add_systems(Update, dev_screenshot);
     }
+    // DEV autopilot: drive the ship through its real controls (thrust/boost toward
+    // the nearest planet) and capture a flight sequence. Gated by GR_FLY=<prefix>.
+    if std::env::var("GR_FLY").is_ok() {
+        app.add_systems(
+            Update,
+            dev_autopilot
+                .after(ship::systems::flight_input)
+                .before(ship::systems::ship_move),
+        );
+    }
 
     app.run();
 }
@@ -75,4 +85,53 @@ fn dev_screenshot(
         exit.send(AppExit::Success);
     }
     *frame += 1;
+}
+
+/// DEV-only autopilot: steers and throttles the ship straight at the nearest
+/// planet (overriding the headless cursor drift) so it actually reaches the
+/// surface, then captures the approach→descent to `GR_FLY`_<n>.png. Runs after
+/// flight_input and before ship_move, so it has the last word on heading/velocity
+/// and the real ship_move/collision/streaming/terrain systems do the rest.
+fn dev_autopilot(
+    mut shot_idx: Local<usize>,
+    mut frame: Local<u32>,
+    mut commands: Commands,
+    mut ship: Query<(&origin::WorldPos, &mut ship::ShipVelocity, &mut Transform), With<ship::PlayerShip>>,
+    planets: Query<(&origin::WorldPos, &galaxy::PlanetBody)>,
+    mut exit: EventWriter<AppExit>,
+) {
+    use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+    *frame += 1;
+
+    let Ok((swp, mut vel, mut tf)) = ship.get_single_mut() else { return };
+    // Pick the nearest planet and head straight for it.
+    let mut nearest: Option<(f64, bevy::math::DVec3)> = None;
+    for (p, body) in &planets {
+        let surf = (p.0 - swp.0).length() - body.radius as f64;
+        if nearest.map_or(true, |(b, _)| surf < b) {
+            nearest = Some((surf, p.0));
+        }
+    }
+    let Some((surf, ppos)) = nearest else { return };
+
+    let dir = (ppos - swp.0).as_vec3().normalize_or_zero();
+    let (yaw, pitch) = ship::physics::look_yaw_pitch(dir);
+    tf.rotation = ship::physics::ship_rotation(yaw, pitch);
+    // Fast while far, gentle on final approach so the slide-collision settles.
+    let speed = if surf > 400.0 { 1000.0 } else { 120.0 };
+    vel.0 = dir * speed;
+
+    // Capture by surface distance (framerate-independent): far → descent → landed.
+    let prefix = std::env::var("GR_FLY").unwrap_or_else(|_| "/tmp/fly".into());
+    let thresholds = [3000.0, 1500.0, 600.0, 250.0, 110.0, 30.0];
+    while *shot_idx < thresholds.len() && surf <= thresholds[*shot_idx] {
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(format!("{prefix}_{}.png", *shot_idx)));
+        eprintln!("FLY shot {}: surface dist = {surf:.0} km", *shot_idx);
+        *shot_idx += 1;
+    }
+    if *shot_idx >= thresholds.len() || *frame > 4000 {
+        exit.send(AppExit::Success);
+    }
 }
