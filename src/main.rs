@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 mod origin;
+mod ship;
 
 fn main() {
     App::new()
