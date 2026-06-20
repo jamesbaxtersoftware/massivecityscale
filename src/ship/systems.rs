@@ -11,23 +11,82 @@ pub fn spawn_ship(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    commands.spawn((
-        PlayerShip { radius: 10.0 },
-        ShipVelocity::default(),
-        ShipControl::default(),
-        WorldPos(DVec3::ZERO),
-        Mesh3d(meshes.add(Cuboid::new(8.0, 8.0, 16.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.8, 0.85, 0.95),
-            emissive: LinearRgba::rgb(0.1, 0.2, 0.4),
-            ..default()
-        })),
-        Transform::default(),
-    ));
+    // Hull: a low, long wedge-ish block (wider and longer than tall) reads more
+    // like a craft than a cube. Forward is -Z, so the engine sits at +Z (rear).
+    commands
+        .spawn((
+            PlayerShip { radius: 10.0 },
+            ShipVelocity::default(),
+            ShipControl::default(),
+            WorldPos(DVec3::ZERO),
+            Mesh3d(meshes.add(Cuboid::new(7.0, 3.0, 18.0))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(0.78, 0.83, 0.95),
+                emissive: LinearRgba::rgb(0.05, 0.10, 0.25),
+                ..default()
+            })),
+            Transform::default(),
+        ))
+        .with_children(|ship| {
+            // Glowing engine block at the rear.
+            ship.spawn((
+                Mesh3d(meshes.add(Cuboid::new(4.0, 2.0, 2.0))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.3, 0.6, 1.0),
+                    emissive: LinearRgba::rgb(0.6, 1.8, 4.0),
+                    unlit: true,
+                    ..default()
+                })),
+                Transform::from_xyz(0.0, 0.0, 9.5),
+            ));
+        });
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 25.0, 60.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
+}
+
+/// One-shot: warp the cursor to screen centre so steering starts neutral (in the
+/// deadzone) instead of snapping toward wherever the pointer happened to be on a
+/// cold start. After this the player moves the mouse to steer as normal.
+pub fn center_cursor_once(
+    mut done: Local<bool>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+) {
+    if *done {
+        return;
+    }
+    if let Ok(mut w) = windows.get_single_mut() {
+        let centre = Vec2::new(w.width(), w.height()) * 0.5;
+        w.set_cursor_position(Some(centre));
+        *done = true;
+    }
+}
+
+/// One-shot (first frame planets exist): orient the ship toward the nearest
+/// planet so the player spawns facing something to fly to, regardless of seed.
+pub fn aim_at_nearest_planet(
+    mut done: Local<bool>,
+    planets: Query<&WorldPos, With<crate::galaxy::PlanetBody>>,
+    mut ship: Query<(&WorldPos, &mut ShipControl), With<PlayerShip>>,
+) {
+    if *done {
+        return;
+    }
+    let Ok((ship_wp, mut ctl)) = ship.get_single_mut() else { return };
+    let mut nearest: Option<(f64, DVec3)> = None;
+    for p in &planets {
+        let d2 = (p.0 - ship_wp.0).length_squared();
+        if nearest.map_or(true, |(best, _)| d2 < best) {
+            nearest = Some((d2, p.0));
+        }
+    }
+    if let Some((_, ppos)) = nearest {
+        let (yaw, pitch) = super::physics::look_yaw_pitch((ppos - ship_wp.0).as_vec3());
+        ctl.yaw = yaw;
+        ctl.pitch = pitch;
+        *done = true;
+    }
 }
 
 /// Mouse steers (cursor offset from screen centre), W/S thrust, A/D strafe,
@@ -118,7 +177,9 @@ pub fn chase_camera(
 
     let fwd = ship.forward().as_vec3();
     let target = ship.translation - fwd * tune.cam_back + Vec3::Y * tune.cam_up;
-    let look = ship.translation + fwd * tune.cam_lookahead;
+    // Lift the look target by half the camera's height: a gentle downward view
+    // that keeps what's ahead near centre-frame while the ship sits lower-third.
+    let look = ship.translation + fwd * tune.cam_lookahead + Vec3::Y * tune.cam_up * 0.5;
 
     let t = 1.0 - 0.5_f32.powf(time.delta_secs() / tune.cam_smooth_half_life.max(1e-6));
     cam.translation = cam.translation.lerp(target, t);

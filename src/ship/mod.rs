@@ -59,6 +59,8 @@ impl Plugin for ShipPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FlightTuning>()
             .add_systems(Startup, systems::spawn_ship)
+            .add_systems(Update, systems::center_cursor_once)
+            .add_systems(Update, systems::aim_at_nearest_planet)
             .add_systems(Update, systems::flight_input.in_set(FrameSet::Input))
             .add_systems(Update, systems::ship_move.in_set(FrameSet::Move))
             .add_systems(Update, systems::set_origin.in_set(FrameSet::Origin))

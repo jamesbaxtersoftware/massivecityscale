@@ -59,12 +59,21 @@ pub fn generate(seed: u64) -> GalaxyData {
 
     let mut planets = Vec::new();
     for s in 0..SYSTEMS {
-        // Systems sit a few thousand km out in front of the player's start.
-        let center = DVec3::new(
-            rng.gen_range(-3_000.0..3_000.0),
-            rng.gen_range(-1_000.0..1_000.0),
-            -4_000.0 - s as f64 * 6_000.0,
-        );
+        // The first system sits dead ahead of the player's start (facing -Z) so
+        // there's something to fly toward immediately; later systems scatter wider.
+        let center = if s == 0 {
+            DVec3::new(
+                rng.gen_range(-600.0..600.0),
+                rng.gen_range(-300.0..300.0),
+                -5_000.0,
+            )
+        } else {
+            DVec3::new(
+                rng.gen_range(-3_000.0..3_000.0),
+                rng.gen_range(-1_000.0..1_000.0),
+                -4_000.0 - s as f64 * 6_000.0,
+            )
+        };
         let n = rng.gen_range(1..=3);
         for _p in 0..n {
             let offset = DVec3::new(

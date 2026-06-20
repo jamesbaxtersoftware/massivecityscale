@@ -7,16 +7,29 @@ use crate::origin::WorldPos;
 use crate::streaming::{LodBody, LodTier};
 
 /// Vertical relief as a fraction of planet radius at full descent.
-pub const TERRAIN_AMPLITUDE_FRAC: f32 = 0.06;
+pub const TERRAIN_AMPLITUDE_FRAC: f32 = 0.07;
 /// Subdivisions of the displaced sphere (higher = finer relief, more verts).
-pub const TERRAIN_SUBDIVS: u32 = 6;
+pub const TERRAIN_SUBDIVS: u32 = 40;
 
 /// Displaced surface radius along `unit_dir` for a planet of base `radius`.
-/// Deterministic (fixed Perlin seed) so the same planet always looks the same.
+/// Sums several Perlin octaves so relief reads at multiple scales (continents
+/// down to ridges). Deterministic (fixed seed) so a planet always looks the same.
+/// Base frequencies are non-integer to avoid Perlin's zeros at lattice points.
 pub fn displace_height(unit_dir: Vec3, radius: f32, amplitude: f32) -> f32 {
     let perlin = Perlin::new(1);
-    let p = unit_dir * 3.7;
-    let n = perlin.get([p.x as f64, p.y as f64, p.z as f64]) as f32; // ~[-1,1]
+    let d = unit_dir.normalize_or_zero();
+    let mut height = 0.0f32;
+    let mut freq = 1.7f32;
+    let mut amp = 1.0f32;
+    let mut total = 0.0f32;
+    for _ in 0..4 {
+        let p = d * freq;
+        height += amp * perlin.get([p.x as f64, p.y as f64, p.z as f64]) as f32;
+        total += amp;
+        freq *= 2.3;
+        amp *= 0.5;
+    }
+    let n = height / total; // normalized to ~[-1, 1]
     radius + n * amplitude
 }
 
@@ -56,7 +69,6 @@ fn displaced_sphere(radius: f32, amplitude: f32, subdivs: u32) -> Mesh {
     let stacks = subdivs.max(2) * 2;
     let slices = subdivs.max(2) * 2;
     let mut positions: Vec<[f32; 3]> = Vec::new();
-    let mut normals: Vec<[f32; 3]> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
 
     for i in 0..=stacks {
@@ -73,7 +85,6 @@ fn displaced_sphere(radius: f32, amplitude: f32, subdivs: u32) -> Mesh {
             let r = displace_height(dir, radius, amplitude);
             let pos = dir * r;
             positions.push([pos.x, pos.y, pos.z]);
-            normals.push([dir.x, dir.y, dir.z]);
         }
     }
     let row = slices + 1;
@@ -84,6 +95,27 @@ fn displaced_sphere(radius: f32, amplitude: f32, subdivs: u32) -> Mesh {
             indices.extend_from_slice(&[a, a + 1, b, a + 1, b + 1, b]);
         }
     }
+
+    // Smooth normals computed from the *displaced* geometry (not the base sphere),
+    // so the relief actually catches the light instead of shading flat.
+    let mut acc = vec![Vec3::ZERO; positions.len()];
+    for tri in indices.chunks(3) {
+        let (i0, i1, i2) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+        let p0 = Vec3::from(positions[i0]);
+        let p1 = Vec3::from(positions[i1]);
+        let p2 = Vec3::from(positions[i2]);
+        let fn_ = (p1 - p0).cross(p2 - p0);
+        acc[i0] += fn_;
+        acc[i1] += fn_;
+        acc[i2] += fn_;
+    }
+    let normals: Vec<[f32; 3]> = acc
+        .iter()
+        .map(|n| {
+            let u = n.normalize_or_zero();
+            [u.x, u.y, u.z]
+        })
+        .collect();
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,

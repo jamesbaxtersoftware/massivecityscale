@@ -39,12 +39,18 @@ fn spawn_galaxy(
         ..default()
     });
     for star in &data.stars {
+        // A 1 km sphere is sub-pixel at galactic range, so scale each star by its
+        // distance to subtend a few pixels — a visible backdrop point. Scale rides
+        // on the Transform (sync_transforms only writes translation), so all stars
+        // keep sharing one mesh+material and stay batched.
+        let dist = star.pos.length() as f32;
+        let size = (dist * 0.0025).max(400.0);
         commands.spawn((
             StarBody,
             WorldPos(star.pos),
             Mesh3d(star_mesh.clone()),
             MeshMaterial3d(star_mat.clone()),
-            Transform::default(),
+            Transform::from_scale(Vec3::splat(size)),
         ));
     }
 

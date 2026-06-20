@@ -19,6 +19,19 @@ pub fn ship_rotation(yaw: f32, pitch: f32) -> Quat {
     Quat::from_euler(EulerRot::YXZ, yaw, pitch, 0.0)
 }
 
+/// Yaw/pitch (the steering state) that makes the ship face `dir`. Inverse of
+/// `ship_rotation`: `ship_rotation(look_yaw_pitch(d)) * -Z ≈ normalize(d)`.
+/// Pitch is clamped to ±`MAX_PITCH` so it composes with the steering limits.
+pub fn look_yaw_pitch(dir: Vec3) -> (f32, f32) {
+    let d = dir.normalize_or_zero();
+    if d == Vec3::ZERO {
+        return (0.0, 0.0);
+    }
+    let pitch = d.y.clamp(-1.0, 1.0).asin().clamp(-MAX_PITCH, MAX_PITCH);
+    let yaw = (-d.x).atan2(-d.z);
+    (yaw, pitch)
+}
+
 /// Integrate one physics step: apply thrust acceleration, exponential drag,
 /// then clamp to `max_speed`. `drag_half_life` is the time for an un-thrusted
 /// velocity to halve.
@@ -69,6 +82,25 @@ mod tests {
         let r = ship_rotation(0.0, 0.0);
         assert!((r * Vec3::NEG_Z - Vec3::NEG_Z).length() < 1e-5);
         assert!((r * Vec3::Y - Vec3::Y).length() < 1e-5);
+    }
+
+    #[test]
+    fn look_yaw_pitch_faces_the_given_direction() {
+        // Directions with |y| within the pitch limit round-trip through the rotation.
+        for d in [
+            Vec3::new(0.0, 0.0, -1.0),
+            Vec3::new(1.0, 0.0, -1.0),
+            Vec3::new(-2.0, 0.3, -3.0),
+            Vec3::new(3.0, -0.2, 1.0),
+            Vec3::new(0.5, 0.0, 4.0),
+        ] {
+            let (y, p) = look_yaw_pitch(d);
+            let fwd = ship_rotation(y, p) * Vec3::NEG_Z;
+            assert!(
+                fwd.angle_between(d.normalize()) < 1e-3,
+                "faces {d:?} (got {fwd:?})"
+            );
+        }
     }
 
     #[test]
