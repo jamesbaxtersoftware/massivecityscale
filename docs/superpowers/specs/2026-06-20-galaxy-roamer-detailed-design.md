@@ -46,9 +46,9 @@ Status: ✅ done · 🟡 partial · 🔴 not started · ⚠️ rework.
 - **3. Galactic precision** 🟡→ extend floating origin with i64 sector tiles for
   LY-scale. **Verify:** unit test: a position 5 LY out yields a jitter-free relative
   transform after warp.
-- **4. Performance budget** 🔴 — target 1080p / 60 fps with ≤ a defined live-body
-  count. **Verify:** log frame time under a stress scene (max live bodies); assert
-  median < 16 ms.
+- **4. Performance budget** 🟡 — target ≥60 fps (hard requirement). `FrameTimeDiagnosticsPlugin`
+  wired; dev harness prints FPS at capture (currently ~120, vsync-capped). **Verify:**
+  FPS readout under a stress scene (max live bodies) stays ≥60.
 - **5. Game state machine** 🔴 — `Space ↔ Approach ↔ Descent ↔ OnFoot ↔ Battle ↔
   Menu`, each gating its systems (extends the pause `AppState` pattern). **Verify:**
   state-transition unit tests for every legal/illegal edge.
@@ -109,8 +109,11 @@ Status: ✅ done · 🟡 partial · 🔴 not started · ⚠️ rework.
   descent screenshot shows entry glow in the entry band.
 - **23. Per-star lighting** 🟡→ the system's star is the light source; brightness with
   distance. **Verify:** screenshot near vs far side of a planet shows correct lit side.
-- **D1 pixel post-process** 🔴 — pixelation + palette/posterize pass over the 3D frame.
-  **Verify:** screenshot shows crisp pixel-art look vs current smooth 3D.
+- **D1 pixel post-process** ✅ — render the 3D scene to a low-res image (960x540,
+  tunable via `pixelate::LORES_W/H`) and upscale nearest to the window for the
+  pixel-art look while keeping crisp 3D geometry underneath. Bonus: rendering at
+  low-res is *cheaper* than native, which helps framerate. **Verified:** native-res
+  screenshot crops show pixel-stepped edges; FPS readout = ~120 (vsync cap).
 
 ## 4. Space — HUD / UI (match reference)
 

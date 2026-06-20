@@ -8,9 +8,10 @@ use bevy::render::camera::RenderTarget;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
 
-/// Internal render resolution (16:9). Lower = chunkier pixels.
-pub const LORES_W: u32 = 480;
-pub const LORES_H: u32 = 270;
+/// Internal render resolution (16:9). Lower = chunkier pixels. 960x540 keeps a
+/// clear pixel-art look but finer than the first 480x270 prototype.
+pub const LORES_W: u32 = 960;
+pub const LORES_H: u32 = 540;
 
 pub struct PixelatePlugin;
 

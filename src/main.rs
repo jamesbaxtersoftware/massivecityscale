@@ -26,6 +26,7 @@ fn main() {
         .add_plugins(terrain::TerrainPlugin)
         .add_plugins(pause::PauseMenuPlugin)
         .add_plugins(pixelate::PixelatePlugin)
+        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         .add_systems(Startup, setup);
 
@@ -71,6 +72,7 @@ fn dev_screenshot(
     mut frame: Local<u32>,
     mut commands: Commands,
     mut ship: Query<&mut origin::WorldPos, With<ship::PlayerShip>>,
+    diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut exit: EventWriter<AppExit>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
@@ -92,6 +94,12 @@ fn dev_screenshot(
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(path));
+        if let Some(fps) = diagnostics
+            .get(&bevy::diagnostic::FrameTimeDiagnosticsPlugin::FPS)
+            .and_then(|d| d.smoothed())
+        {
+            eprintln!("FPS at capture: {fps:.1}");
+        }
     }
     if *frame == 120 {
         exit.send(AppExit::Success);
