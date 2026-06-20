@@ -81,7 +81,7 @@ fn displaced_sphere(radius: f32, amplitude: f32, subdivs: u32) -> Mesh {
         for j in 0..slices {
             let a = i * row + j;
             let b = a + row;
-            indices.extend_from_slice(&[a, b, a + 1, a + 1, b, b + 1]);
+            indices.extend_from_slice(&[a, a + 1, b, a + 1, b + 1, b]);
         }
     }
 
@@ -98,6 +98,41 @@ fn displaced_sphere(radius: f32, amplitude: f32, subdivs: u32) -> Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::render::mesh::{Indices, VertexAttributeValues};
+
+    #[test]
+    fn displaced_sphere_triangles_face_outward() {
+        let mesh = displaced_sphere(350.0, 20.0, 6);
+
+        let positions = match mesh.attribute(Mesh::ATTRIBUTE_POSITION).unwrap() {
+            VertexAttributeValues::Float32x3(v) => v.clone(),
+            _ => panic!("unexpected position format"),
+        };
+
+        let idx = match mesh.indices().unwrap() {
+            Indices::U32(v) => v.clone(),
+            _ => panic!("unexpected index format"),
+        };
+
+        for tri in idx.chunks_exact(3) {
+            let (i0, i1, i2) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+            let p0 = Vec3::from(positions[i0]);
+            let p1 = Vec3::from(positions[i1]);
+            let p2 = Vec3::from(positions[i2]);
+            let n = (p1 - p0).cross(p2 - p0);
+            // Skip degenerate triangles at poles (near-zero area due to collapsed vertices).
+            // At phi=0 or phi=PI all vertices in that ring share the same position;
+            // floating-point residuals give a tiny but unreliable normal, so skip those.
+            if n.length_squared() < 1.0 {
+                continue;
+            }
+            let c = (p0 + p1 + p2) / 3.0;
+            assert!(
+                n.dot(c) > 0.0,
+                "triangle ({i0},{i1},{i2}) faces inward: n={n:?} c={c:?}"
+            );
+        }
+    }
 
     #[test]
     fn displacement_stays_within_amplitude_band() {
