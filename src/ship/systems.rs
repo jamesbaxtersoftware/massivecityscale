@@ -208,6 +208,14 @@ pub fn ship_move(
     wp.0 += (vel.0 * dt).as_dvec3();
 
     for (planet_wp, body) in &planets {
+        let shell = (body.radius + ship.radius) as f64 + PLANET_MARGIN as f64;
+        // Distance check in f64 first: only the planet we're actually touching gets
+        // the f32 clamp. Skipping distant bodies avoids an f32 round-trip that, for
+        // light-year-scale planets, would lose billions of metres of precision and
+        // teleport the ship.
+        if (wp.0 - planet_wp.0).length() >= shell {
+            continue;
+        }
         let rel = (wp.0 - planet_wp.0).as_vec3(); // small near the surface
         let (new_rel, new_vel) = clamp_to_planet(
             rel, vel.0, Vec3::ZERO, body.radius + ship.radius, PLANET_MARGIN,

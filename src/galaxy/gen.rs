@@ -64,15 +64,15 @@ pub fn generate(seed: u64) -> GalaxyData {
         // something to fly toward immediately; later systems scatter further out.
         let center = if s == 0 {
             DVec3::new(
-                rng.gen_range(-6.0e6..6.0e6),
-                rng.gen_range(-3.0e6..3.0e6),
-                -4.0e7,
+                rng.gen_range(-4.0e6..4.0e6),
+                rng.gen_range(-2.0e6..2.0e6),
+                -1.8e7,
             )
         } else {
             DVec3::new(
-                rng.gen_range(-3.0e7..3.0e7),
-                rng.gen_range(-1.0e7..1.0e7),
-                -4.0e7 - s as f64 * 6.0e7,
+                rng.gen_range(-2.0e7..2.0e7),
+                rng.gen_range(-8.0e6..8.0e6),
+                -1.8e7 - s as f64 * 3.0e7,
             )
         };
         let n = rng.gen_range(1..=3);

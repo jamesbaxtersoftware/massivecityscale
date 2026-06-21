@@ -10,6 +10,7 @@ mod pixelate;
 mod ship;
 mod spacefx;
 mod streaming;
+mod targeting;
 mod terrain;
 mod warp;
 
@@ -32,6 +33,7 @@ fn main() {
         .add_plugins(spacefx::SpaceFxPlugin)
         .add_plugins(warp::WarpPlugin)
         .add_plugins(hud::HudPlugin)
+        .add_plugins(targeting::TargetingPlugin)
         .add_plugins(onfoot::OnFootPlugin)
         .add_plugins(pixelate::PixelatePlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
@@ -80,12 +82,18 @@ fn dev_screenshot(
     mut frame: Local<u32>,
     mut commands: Commands,
     mut ship: Query<(&mut origin::WorldPos, &mut ship::ShipControl, &mut Transform), With<ship::PlayerShip>>,
+    vel_q: Query<&ship::ShipVelocity, With<ship::PlayerShip>>,
     warp_targets: Res<galaxy::WarpTargets>,
     mut next_mode: ResMut<NextState<onfoot::Mode>>,
+    mut autopilot: ResMut<targeting::Autopilot>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut exit: EventWriter<AppExit>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+    if *frame == 2 && std::env::var("GR_AP").is_ok() {
+        // Engage warp-to-target once targets have been populated.
+        autopilot.on = true;
+    }
     if *frame == 0 {
         if std::env::var("GR_FOOT").is_ok() {
             next_mode.set(onfoot::Mode::OnFoot);
@@ -113,6 +121,10 @@ fn dev_screenshot(
         }
     }
     if *frame == 90 {
+        if let Ok((wp, _, _)) = ship.get_single() {
+            let v = vel_q.get_single().map(|v| v.0).unwrap_or(Vec3::ZERO);
+            eprintln!("SHIP WorldPos = {:?}  vel = {:?} ({:.0} m/s)", wp.0, v, v.length());
+        }
         let path = std::env::var("GR_SHOT").unwrap();
         commands
             .spawn(Screenshot::primary_window())

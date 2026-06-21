@@ -185,8 +185,11 @@ fn update_hud(
     status: Res<ShipStatus>,
     wallet: Res<Wallet>,
     objective: Res<Objective>,
+    targets: Res<crate::targeting::Targets>,
+    autopilot: Res<crate::targeting::Autopilot>,
     ship: Query<(&WorldPos, &ShipVelocity), With<PlayerShip>>,
     planets: Query<(&WorldPos, &PlanetBody), Without<PlayerShip>>,
+    target_q: Query<(&WorldPos, &PlanetBody)>,
     mut shield: Query<&mut Node, (With<ShieldBar>, Without<HullBar>, Without<FuelBar>)>,
     mut hull: Query<&mut Node, (With<HullBar>, Without<ShieldBar>, Without<FuelBar>)>,
     mut fuel: Query<&mut Node, (With<FuelBar>, Without<ShieldBar>, Without<HullBar>)>,
@@ -215,19 +218,27 @@ fn update_hud(
     if let Ok(mut t) = texts.p1().get_single_mut() {
         t.0 = format!("\u{25C6} {}", wallet.crystals);
     }
-    // Nearest world surface distance.
-    let mut nearest = f64::MAX;
-    for (p, body) in &planets {
-        nearest = nearest.min((p.0 - swp.0).length() - body.radius as f64);
-    }
+    // Prefer the selected target's live distance; else the nearest world.
+    let (label, dist) = match targets.selected.and_then(|e| target_q.get(e).ok()) {
+        Some((p, body)) => ("TARGET", (p.0 - swp.0).length() - body.radius as f64),
+        None => {
+            let mut n = f64::MAX;
+            for (p, body) in &planets {
+                n = n.min((p.0 - swp.0).length() - body.radius as f64);
+            }
+            ("NEAREST", n)
+        }
+    };
     if let Ok(mut t) = texts.p2().get_single_mut() {
-        if nearest.is_finite() {
-            let km = nearest / 1000.0;
-            t.0 = if km > 1.0e9 {
-                format!("NEAREST WORLD  {:.2} LY", nearest / 9.4607e15)
+        if dist.is_finite() {
+            let km = dist / 1000.0;
+            let d = if km > 1.0e9 {
+                format!("{:.2} LY", dist / 9.4607e15)
             } else {
-                format!("NEAREST WORLD  {km:.0} km")
+                format!("{km:.0} km")
             };
+            let warp = if autopilot.on { "  \u{25B6} WARP" } else { "" };
+            t.0 = format!("{label}  {d}{warp}\n[T] target   [G] warp");
         }
     }
     if let Ok(mut t) = texts.p3().get_single_mut() {
