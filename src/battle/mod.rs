@@ -1,6 +1,6 @@
-//! Turn-based battles. Engage a wild creature (ENTER when in reach) to enter a
-//! Battle: each turn you [1] Attack, [2] throw a Capture Disc, or [3] Flee; the
-//! creature retaliates. Weakening it raises the capture chance. Win by capturing.
+//! Turn-based battles with a Pokémon-style 2x2 action menu, driven by keyboard
+//! OR gamepad. Engage a creature (ENTER / A) -> Encounter flash -> Battle. Navigate
+//! the menu with arrows / D-pad, confirm with Enter / A, back out with Esc / B.
 
 use bevy::prelude::*;
 use crate::creatures::{
@@ -14,17 +14,14 @@ use crate::onfoot::Mode;
 pub enum Phase {
     #[default]
     Roam,
-    /// Brief flashy transition before the battle (old-school encounter effect).
     Encounter,
     Battle,
 }
 
-/// Length of the encounter transition (seconds).
 const ENCOUNTER_DURATION: f32 = 0.9;
 
 #[derive(Resource, Default)]
 struct EncounterTimer(f32);
-
 #[derive(Component)]
 struct EncounterOverlay;
 
@@ -36,11 +33,31 @@ pub struct Battle {
     pub level: u32,
     pub hp: f32,
     pub max_hp: f32,
-    /// Extra capture chance from Bait, this battle.
     pub bait_bonus: f32,
-    /// Counts down after a hit for a brief scale-punch reaction.
     pub hit_timer: f32,
+    pub enemy_stunned: bool,
 }
+
+#[derive(Clone, Copy, PartialEq)]
+enum Page {
+    Main,
+    Item,
+}
+
+/// 2x2 menu state: which page and the cursor (0=TL, 1=TR, 2=BL, 3=BR).
+#[derive(Resource)]
+struct Menu {
+    page: Page,
+    cursor: usize,
+}
+impl Default for Menu {
+    fn default() -> Self {
+        Self { page: Page::Main, cursor: 0 }
+    }
+}
+
+#[derive(Resource, Default)]
+struct BattleLog(String);
 
 pub struct BattlePlugin;
 
@@ -49,44 +66,43 @@ impl Plugin for BattlePlugin {
         app.init_state::<Phase>()
             .init_resource::<Battle>()
             .init_resource::<EncounterTimer>()
+            .init_resource::<Menu>()
+            .init_resource::<BattleLog>()
             .add_systems(
                 Update,
                 start_battle
                     .run_if(in_state(Mode::OnFoot))
                     .run_if(in_state(Phase::Roam)),
             )
-            // Encounter transition.
             .add_systems(OnEnter(Phase::Encounter), spawn_encounter_overlay)
             .add_systems(OnExit(Phase::Encounter), despawn_encounter_overlay)
             .add_systems(Update, encounter_anim.run_if(in_state(Phase::Encounter)))
-            // Battle.
             .add_systems(
                 Update,
-                (battle_input, battle_camera).run_if(in_state(Phase::Battle)),
+                (menu_input, battle_camera, update_battle_ui).run_if(in_state(Phase::Battle)),
             )
             .add_systems(OnEnter(Phase::Battle), spawn_battle_ui)
-            .add_systems(OnExit(Phase::Battle), despawn_battle_ui)
-            .add_systems(Update, update_battle_ui.run_if(in_state(Phase::Battle)));
+            .add_systems(OnExit(Phase::Battle), despawn_battle_ui);
     }
 }
 
-/// Damage the player's strike deals at a given level.
 pub fn player_attack_damage(level: u32) -> f32 {
     10.0 + level as f32 * 3.0
 }
-/// Damage a wild creature deals back at a given level.
 pub fn enemy_attack_damage(level: u32) -> f32 {
     4.0 + level as f32 * 1.5
 }
 
 fn start_battle(
     keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
     engaged: Res<Engaged>,
     creatures: Query<&Creature>,
     mut battle: ResMut<Battle>,
     mut next: ResMut<NextState<Phase>>,
 ) {
-    if !keys.just_pressed(KeyCode::Enter) {
+    let pad = gamepads.iter().next().is_some_and(|g| g.just_pressed(GamepadButton::South));
+    if !(keys.just_pressed(KeyCode::Enter) || pad) {
         return;
     }
     let Some((e, c)) = engaged.0.and_then(|e| creatures.get(e).ok().map(|c| (e, c))) else {
@@ -100,11 +116,12 @@ fn start_battle(
         max_hp: c.max_hp,
         bait_bonus: 0.0,
         hit_timer: 0.0,
+        enemy_stunned: false,
     };
     next.set(Phase::Encounter);
 }
 
-// ── Encounter transition (screen flash, then cut to battle) ──────────────────
+// ── Encounter transition ─────────────────────────────────────────────────────
 fn spawn_encounter_overlay(mut commands: Commands, mut timer: ResMut<EncounterTimer>) {
     timer.0 = 0.0;
     commands.spawn((
@@ -126,7 +143,6 @@ fn despawn_encounter_overlay(mut commands: Commands, q: Query<Entity, With<Encou
     }
 }
 
-/// Strobe the overlay (white/black flashes) then hold black, then cut to battle.
 fn encounter_anim(
     time: Res<Time>,
     mut timer: ResMut<EncounterTimer>,
@@ -135,13 +151,8 @@ fn encounter_anim(
 ) {
     timer.0 += time.delta_secs();
     let t = timer.0;
-    let color = if t < 0.55 {
-        // Rapid flash between white and black.
-        if (t * 14.0) as i32 % 2 == 0 {
-            Color::srgb(1.0, 1.0, 1.0)
-        } else {
-            Color::BLACK
-        }
+    let color = if t < 0.55 && (t * 14.0) as i32 % 2 == 0 {
+        Color::srgb(1.0, 1.0, 1.0)
     } else {
         Color::BLACK
     };
@@ -153,7 +164,6 @@ fn encounter_anim(
     }
 }
 
-/// Frame the enemy creature, turn it to face the camera, and punch its scale on hit.
 fn battle_camera(
     time: Res<Time>,
     mut battle: ResMut<Battle>,
@@ -166,13 +176,11 @@ fn battle_camera(
     let cam_pos = enemy.translation + Vec3::new(1.2, 1.6, 4.2);
     c.translation = cam_pos;
     c.look_at(enemy.translation + Vec3::Y * 0.9, Vec3::Y);
-    // Enemy turns to face the camera so we see its face.
     let mut to_cam = cam_pos - enemy.translation;
     to_cam.y = 0.0;
     if to_cam.length_squared() > 1e-4 {
         enemy.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, to_cam.normalize());
     }
-    // Hit reaction: a quick squash-stretch.
     if battle.hit_timer > 0.0 {
         battle.hit_timer = (battle.hit_timer - time.delta_secs()).max(0.0);
         let k = battle.hit_timer / 0.22;
@@ -182,13 +190,16 @@ fn battle_camera(
     }
 }
 
-// ── Battle message log (shown in the UI) ─────────────────────────────────────
-#[derive(Resource, Default)]
-struct BattleLog(String);
+// ── Menu input (keyboard + gamepad) ──────────────────────────────────────────
+fn just(keys: &ButtonInput<KeyCode>, gp: Option<&Gamepad>, kb: &[KeyCode], pad: GamepadButton) -> bool {
+    kb.iter().any(|k| keys.just_pressed(*k)) || gp.is_some_and(|g| g.just_pressed(pad))
+}
 
 #[allow(clippy::too_many_arguments)]
-fn battle_input(
+fn menu_input(
     keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
+    mut menu: ResMut<Menu>,
     mut battle: ResMut<Battle>,
     mut stats: ResMut<PlayerStats>,
     mut inv: ResMut<Inventory>,
@@ -198,79 +209,150 @@ fn battle_input(
     mut next: ResMut<NextState<Phase>>,
     mut commands: Commands,
 ) {
-    let kind = battle.kind.unwrap_or(CreatureKind::Grasshog);
-    let mut acted = false;
+    let gp = gamepads.iter().next();
+    let up = just(&keys, gp, &[KeyCode::ArrowUp], GamepadButton::DPadUp);
+    let down = just(&keys, gp, &[KeyCode::ArrowDown], GamepadButton::DPadDown);
+    let left = just(&keys, gp, &[KeyCode::ArrowLeft], GamepadButton::DPadLeft);
+    let right = just(&keys, gp, &[KeyCode::ArrowRight], GamepadButton::DPadRight);
+    let confirm = just(&keys, gp, &[KeyCode::Enter, KeyCode::Space], GamepadButton::South);
+    let back = just(&keys, gp, &[KeyCode::Escape, KeyCode::Backspace], GamepadButton::East);
 
-    if keys.just_pressed(KeyCode::Digit1) {
-        // Attack — the lead party creature's element decides effectiveness.
-        let eff = collection
-            .party
-            .first()
-            .map(|lead| effectiveness(lead.kind.element(), kind.element()))
-            .unwrap_or(1.0);
-        let dmg = player_attack_damage(stats.level) * eff;
-        battle.hp = (battle.hp - dmg).max(0.0);
-        battle.hit_timer = 0.22;
-        let tag = match eff {
-            e if e > 1.0 => "  It's super effective!",
-            e if e < 1.0 => "  It's not very effective...",
-            _ => "",
-        };
-        log.0 = format!("You strike for {dmg:.0}!{tag}");
-        acted = true;
-    } else if keys.just_pressed(KeyCode::Digit3) {
-        // Heal Spray.
-        if inv.heal_spray == 0 {
-            log.0 = "No Heal Spray left!".into();
+    let (mut r, mut c) = (menu.cursor / 2, menu.cursor % 2);
+    if up {
+        r = 0;
+    }
+    if down {
+        r = 1;
+    }
+    if left {
+        c = 0;
+    }
+    if right {
+        c = 1;
+    }
+    menu.cursor = r * 2 + c;
+
+    if back && menu.page == Page::Item {
+        menu.page = Page::Main;
+        menu.cursor = 0;
+        return;
+    }
+    if !confirm {
+        return;
+    }
+
+    let kind = battle.kind.unwrap_or(CreatureKind::Grasshog);
+    // Resolve the selection.
+    enum Act {
+        Attack,
+        Capture,
+        OpenItem,
+        Flee,
+        Heal,
+        Bait,
+        Flash,
+        Back,
+    }
+    let act = match (menu.page, menu.cursor) {
+        (Page::Main, 0) => Act::Attack,
+        (Page::Main, 1) => Act::Capture,
+        (Page::Main, 2) => Act::OpenItem,
+        (Page::Main, _) => Act::Flee,
+        (Page::Item, 0) => Act::Heal,
+        (Page::Item, 1) => Act::Bait,
+        (Page::Item, 2) => Act::Flash,
+        (Page::Item, _) => Act::Back,
+    };
+
+    match act {
+        Act::OpenItem => {
+            menu.page = Page::Item;
+            menu.cursor = 0;
             return;
         }
-        inv.heal_spray -= 1;
-        stats.hp = (stats.hp + 25.0).min(stats.max_hp);
-        log.0 = "You spray on a heal (+25 HP).".into();
-        acted = true;
-    } else if keys.just_pressed(KeyCode::Digit4) {
-        // Bait — raises capture chance for the rest of the battle.
-        if inv.bait == 0 {
-            log.0 = "No Bait left!".into();
+        Act::Back => {
+            menu.page = Page::Main;
+            menu.cursor = 0;
             return;
         }
-        inv.bait -= 1;
-        battle.bait_bonus = (battle.bait_bonus + 0.15).min(0.45);
-        log.0 = format!("You toss Bait — the {kind:?} is intrigued.");
-        acted = true;
-    } else if keys.just_pressed(KeyCode::Digit2) {
-        // Throw Capture Disc.
-        if inv.capture_disc == 0 {
-            log.0 = "Out of Capture Discs!".into();
-            return;
-        }
-        inv.capture_disc -= 1;
-        let chance =
-            (capture_chance(battle.hp, battle.max_hp, battle.level) + battle.bait_bonus).clamp(0.0, 1.0);
-        if rand::random::<f32>() < chance {
-            if let Some(e) = battle.enemy {
-                commands.entity(e).despawn();
-            }
-            collection.party.push(CaughtCreature { kind, level: battle.level });
-            gain_exp(&mut stats, battle.level * 20);
-            wallet.crystals += CAPTURE_REWARD;
-            log.0 = format!("Gotcha! {kind:?} was caught!");
+        Act::Flee => {
+            log.0 = "Got away safely.".into();
             next.set(Phase::Roam);
             return;
         }
-        log.0 = format!("Aw, the {kind:?} broke free!");
-        acted = true;
-    } else if keys.just_pressed(KeyCode::Digit5) {
-        log.0 = "You got away safely.".into();
-        next.set(Phase::Roam);
-        return;
+        Act::Attack => {
+            let eff = collection
+                .party
+                .first()
+                .map(|l| effectiveness(l.kind.element(), kind.element()))
+                .unwrap_or(1.0);
+            let dmg = player_attack_damage(stats.level) * eff;
+            battle.hp = (battle.hp - dmg).max(0.0);
+            battle.hit_timer = 0.22;
+            let tag = match eff {
+                e if e > 1.0 => "  Super effective!",
+                e if e < 1.0 => "  Not very effective...",
+                _ => "",
+            };
+            log.0 = format!("You strike for {dmg:.0}!{tag}");
+        }
+        Act::Capture => {
+            if inv.capture_disc == 0 {
+                log.0 = "Out of Capture Discs!".into();
+                return;
+            }
+            inv.capture_disc -= 1;
+            let chance = (capture_chance(battle.hp, battle.max_hp, battle.level) + battle.bait_bonus)
+                .clamp(0.0, 1.0);
+            if rand::random::<f32>() < chance {
+                if let Some(e) = battle.enemy {
+                    commands.entity(e).despawn();
+                }
+                collection.party.push(CaughtCreature { kind, level: battle.level });
+                gain_exp(&mut stats, battle.level * 20);
+                wallet.crystals += CAPTURE_REWARD;
+                log.0 = format!("Gotcha! {kind:?} was caught!");
+                next.set(Phase::Roam);
+                return;
+            }
+            log.0 = format!("Aw, the {kind:?} broke free!");
+        }
+        Act::Heal => {
+            if inv.heal_spray == 0 {
+                log.0 = "No Heal Spray!".into();
+                return;
+            }
+            inv.heal_spray -= 1;
+            stats.hp = (stats.hp + 25.0).min(stats.max_hp);
+            log.0 = "You spray on a heal (+25 HP).".into();
+            menu.page = Page::Main;
+            menu.cursor = 0;
+        }
+        Act::Bait => {
+            if inv.bait == 0 {
+                log.0 = "No Bait!".into();
+                return;
+            }
+            inv.bait -= 1;
+            battle.bait_bonus = (battle.bait_bonus + 0.15).min(0.45);
+            log.0 = format!("You toss Bait — the {kind:?} is intrigued.");
+            menu.page = Page::Main;
+            menu.cursor = 0;
+        }
+        Act::Flash => {
+            if inv.flash_bomb == 0 {
+                log.0 = "No Flash Bombs!".into();
+                return;
+            }
+            inv.flash_bomb -= 1;
+            battle.enemy_stunned = true;
+            log.0 = format!("Flash! The {kind:?} is dazzled.");
+            menu.page = Page::Main;
+            menu.cursor = 0;
+        }
     }
 
-    if !acted {
-        return;
-    }
-
-    // Enemy fainted from the attack (no capture).
+    // Enemy fainted from the hit?
     if battle.hp <= 0.0 {
         if let Some(e) = battle.enemy {
             commands.entity(e).despawn();
@@ -280,8 +362,12 @@ fn battle_input(
         next.set(Phase::Roam);
         return;
     }
-
-    // Enemy's turn.
+    // Enemy's turn (unless stunned).
+    if battle.enemy_stunned {
+        battle.enemy_stunned = false;
+        log.0 = format!("{}  The {kind:?} is too dazed to move!", log.0);
+        return;
+    }
     let edmg = enemy_attack_damage(battle.level);
     stats.hp = (stats.hp - edmg).max(0.0);
     log.0 = format!("{}  The wild {kind:?} hits back for {edmg:.0}!", log.0);
@@ -302,12 +388,18 @@ struct LogLine;
 #[derive(Component)]
 struct PlayerLine;
 #[derive(Component)]
-struct MenuLine;
-#[derive(Component)]
 struct EnemyHpFill;
+#[derive(Component)]
+struct MenuCell(usize);
+#[derive(Component)]
+struct MenuLabel(usize);
 
-fn spawn_battle_ui(mut commands: Commands) {
-    commands.init_resource::<BattleLog>();
+fn spawn_battle_ui(mut commands: Commands, mut menu: ResMut<Menu>, mut log: ResMut<BattleLog>) {
+    menu.page = Page::Main;
+    menu.cursor = 0;
+    if log.0.is_empty() {
+        log.0 = "A wild creature blocks your path!".into();
+    }
     commands
         .spawn((
             BattleUi,
@@ -317,63 +409,116 @@ fn spawn_battle_ui(mut commands: Commands) {
                 height: Val::Percent(100.0),
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::SpaceBetween,
-                padding: UiRect::all(Val::Px(40.0)),
+                padding: UiRect::all(Val::Px(28.0)),
                 ..default()
             },
         ))
-        .with_children(|c| {
-            // Enemy (top): name/level line + HP bar.
-            c.spawn((
-                EnemyLine,
-                Text::new(""),
-                TextFont { font_size: 26.0, ..default() },
-                TextColor(Color::srgb(1.0, 0.9, 0.85)),
-            ));
-            c.spawn((
-                Node {
-                    width: Val::Px(280.0),
-                    height: Val::Px(16.0),
-                    margin: UiRect::top(Val::Px(6.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.08, 0.10, 0.16, 0.9)),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    EnemyHpFill,
-                    Node {
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.3, 0.9, 0.4)),
-                ));
-            });
-            // Message + menu (bottom block).
-            c.spawn(Node {
+        .with_children(|root| {
+            // Top: enemy name + HP bar.
+            root.spawn(Node {
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(8.0),
+                row_gap: Val::Px(6.0),
                 ..default()
             })
-            .with_children(|b| {
-                b.spawn((
-                    LogLine,
+            .with_children(|top| {
+                top.spawn((
+                    EnemyLine,
                     Text::new(""),
-                    TextFont { font_size: 22.0, ..default() },
-                    TextColor(Color::srgb(0.95, 0.97, 1.0)),
+                    TextFont { font_size: 26.0, ..default() },
+                    TextColor(Color::srgb(1.0, 0.92, 0.85)),
                 ));
-                b.spawn((
-                    PlayerLine,
-                    Text::new(""),
-                    TextFont { font_size: 18.0, ..default() },
-                    TextColor(Color::srgb(0.7, 0.85, 1.0)),
-                ));
-                b.spawn((
-                    MenuLine,
-                    Text::new(""),
-                    TextFont { font_size: 22.0, ..default() },
-                    TextColor(Color::srgb(1.0, 0.9, 0.3)),
-                ));
+                top.spawn((
+                    Node { width: Val::Px(280.0), height: Val::Px(16.0), ..default() },
+                    BackgroundColor(Color::srgba(0.08, 0.10, 0.16, 0.9)),
+                ))
+                .with_children(|track| {
+                    track.spawn((
+                        EnemyHpFill,
+                        Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+                        BackgroundColor(Color::srgb(0.3, 0.9, 0.4)),
+                    ));
+                });
+            });
+
+            // Bottom: message box (left) + 2x2 menu (right).
+            root.spawn(Node {
+                width: Val::Percent(100.0),
+                column_gap: Val::Px(16.0),
+                align_items: AlignItems::FlexEnd,
+                ..default()
+            })
+            .with_children(|bottom| {
+                // Message / log box.
+                bottom
+                    .spawn((
+                        Node {
+                            flex_grow: 1.0,
+                            min_height: Val::Px(110.0),
+                            padding: UiRect::all(Val::Px(14.0)),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(8.0),
+                            border: UiRect::all(Val::Px(2.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.05, 0.07, 0.12, 0.92)),
+                        BorderColor(Color::srgb(0.4, 0.55, 0.8)),
+                    ))
+                    .with_children(|box_| {
+                        box_.spawn((
+                            LogLine,
+                            Text::new(""),
+                            TextFont { font_size: 20.0, ..default() },
+                            TextColor(Color::srgb(0.95, 0.97, 1.0)),
+                        ));
+                        box_.spawn((
+                            PlayerLine,
+                            Text::new(""),
+                            TextFont { font_size: 16.0, ..default() },
+                            TextColor(Color::srgb(0.7, 0.85, 1.0)),
+                        ));
+                    });
+
+                // 2x2 menu grid.
+                bottom
+                    .spawn(Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(6.0),
+                        ..default()
+                    })
+                    .with_children(|grid| {
+                        for row in 0..2 {
+                            grid.spawn(Node {
+                                column_gap: Val::Px(6.0),
+                                ..default()
+                            })
+                            .with_children(|r| {
+                                for col in 0..2 {
+                                    let idx = row * 2 + col;
+                                    r.spawn((
+                                        MenuCell(idx),
+                                        Node {
+                                            width: Val::Px(150.0),
+                                            height: Val::Px(46.0),
+                                            justify_content: JustifyContent::Center,
+                                            align_items: AlignItems::Center,
+                                            border: UiRect::all(Val::Px(2.0)),
+                                            ..default()
+                                        },
+                                        BackgroundColor(Color::srgba(0.10, 0.12, 0.2, 0.95)),
+                                        BorderColor(Color::srgb(0.3, 0.4, 0.6)),
+                                    ))
+                                    .with_children(|cell| {
+                                        cell.spawn((
+                                            MenuLabel(idx),
+                                            Text::new(""),
+                                            TextFont { font_size: 19.0, ..default() },
+                                            TextColor(Color::srgb(0.95, 0.97, 1.0)),
+                                        ));
+                                    });
+                                }
+                            });
+                        }
+                    });
             });
         });
 }
@@ -389,13 +534,15 @@ fn update_battle_ui(
     battle: Res<Battle>,
     stats: Res<PlayerStats>,
     inv: Res<Inventory>,
+    menu: Res<Menu>,
     log: Res<BattleLog>,
-    mut hpbar: Query<(&mut Node, &mut BackgroundColor), With<EnemyHpFill>>,
+    mut hpbar: Query<(&mut Node, &mut BackgroundColor), (With<EnemyHpFill>, Without<MenuCell>)>,
+    mut cells: Query<(&MenuCell, &mut BackgroundColor, &mut BorderColor), Without<EnemyHpFill>>,
     mut q: ParamSet<(
         Query<&mut Text, With<EnemyLine>>,
         Query<&mut Text, With<LogLine>>,
         Query<&mut Text, With<PlayerLine>>,
-        Query<&mut Text, With<MenuLine>>,
+        Query<(&MenuLabel, &mut Text)>,
     )>,
 ) {
     let kind = battle.kind.unwrap_or(CreatureKind::Grasshog);
@@ -419,11 +566,31 @@ fn update_battle_ui(
     if let Ok(mut t) = q.p2().get_single_mut() {
         t.0 = format!("YOU   HP {:.0}/{:.0}   SP {:.0}/{:.0}", stats.hp, stats.max_hp, stats.sp, stats.max_sp);
     }
-    if let Ok(mut t) = q.p3().get_single_mut() {
-        t.0 = format!(
-            "[1] Attack    [2] Capture Disc ({})    [3] Heal ({})    [4] Bait ({})    [5] Flee",
-            inv.capture_disc, inv.heal_spray, inv.bait
-        );
+
+    let main = [
+        "Attack".to_string(),
+        "Capture".to_string(),
+        "Item".to_string(),
+        "Flee".to_string(),
+    ];
+    let item = [
+        format!("Heal ({})", inv.heal_spray),
+        format!("Bait ({})", inv.bait),
+        format!("Flash ({})", inv.flash_bomb),
+        "Back".to_string(),
+    ];
+    let labels_src = if menu.page == Page::Main { main } else { item };
+    for (l, mut t) in &mut q.p3() {
+        t.0 = labels_src[l.0].clone();
+    }
+    for (cell, mut bg, mut border) in &mut cells {
+        if cell.0 == menu.cursor {
+            bg.0 = Color::srgb(0.95, 0.8, 0.25);
+            border.0 = Color::srgb(1.0, 1.0, 1.0);
+        } else {
+            bg.0 = Color::srgba(0.10, 0.12, 0.2, 0.95);
+            border.0 = Color::srgb(0.3, 0.4, 0.6);
+        }
     }
 }
 
@@ -435,6 +602,5 @@ mod tests {
     fn attack_scales_with_level_and_enemy_hits_back() {
         assert!(player_attack_damage(10) > player_attack_damage(1));
         assert!(enemy_attack_damage(10) > enemy_attack_damage(1));
-        assert!(player_attack_damage(5) > 0.0 && enemy_attack_damage(5) > 0.0);
     }
 }

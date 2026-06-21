@@ -135,6 +135,7 @@ fn dev_screenshot(
                 max_hp: 52.0,
                 bait_bonus: 0.0,
                 hit_timer: 0.0,
+                enemy_stunned: false,
             };
         }
         let g = galaxy::gen::generate(galaxy::WORLD_SEED);
