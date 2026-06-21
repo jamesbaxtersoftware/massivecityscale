@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::math::DVec3;
 use bevy::window::PrimaryWindow;
 use crate::origin::{WorldPos, FloatingOrigin};
-use super::physics::{steer, ship_rotation, integrate_velocity};
+use super::physics::{ship_rotation, integrate_velocity};
 use super::{FlightTuning, PlayerShip, ShipEngine, ShipVelocity, ShipControl};
 
 /// Spawn the player ship (a cube) at the world origin, plus its chase camera.
@@ -153,29 +153,27 @@ pub fn aim_at_nearest_planet(
     }
 }
 
-/// Mouse steers (cursor offset from screen centre), W/S thrust, A/D strafe,
-/// hold Shift boosts. Facing tracked as yaw/pitch and rebuilt each frame so the
-/// ship never rolls.
+/// Relative mouse-look steering (turn only while the mouse moves; hold heading
+/// when still), W/S thrust, A/D strafe, hold Shift boosts. Facing tracked as
+/// yaw/pitch and rebuilt each frame so the ship never rolls.
 pub fn flight_input(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     tune: Res<FlightTuning>,
-    windows: Query<&Window, With<PrimaryWindow>>,
+    mut mouse_motion: EventReader<bevy::input::mouse::MouseMotion>,
     mut ship_q: Query<(&mut Transform, &mut ShipVelocity, &mut ShipControl), With<PlayerShip>>,
 ) {
+    use super::physics::MAX_PITCH;
     let dt = time.delta_secs();
     let Ok((mut tf, mut vel, mut ctl)) = ship_q.get_single_mut() else { return };
 
-    if let Ok(window) = windows.get_single() {
-        if let Some(cursor) = window.cursor_position() {
-            let half = Vec2::new(window.width(), window.height()) * 0.5;
-            let mut off = (cursor - half) / half;
-            if off.length() < tune.steer_deadzone { off = Vec2::ZERO; }
-            let (yaw, pitch) = steer(ctl.yaw, ctl.pitch, off, tune.turn_rate, dt);
-            ctl.yaw = yaw;
-            ctl.pitch = pitch;
-        }
+    // Accumulate this frame's mouse movement → relative turn. No movement = no turn.
+    let mut delta = Vec2::ZERO;
+    for ev in mouse_motion.read() {
+        delta += ev.delta;
     }
+    ctl.yaw -= delta.x * tune.mouse_sens;
+    ctl.pitch = (ctl.pitch - delta.y * tune.mouse_sens).clamp(-MAX_PITCH, MAX_PITCH);
     tf.rotation = ship_rotation(ctl.yaw, ctl.pitch);
 
     let boosting = keys.pressed(KeyCode::ShiftLeft);

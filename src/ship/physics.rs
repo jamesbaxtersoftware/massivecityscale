@@ -5,14 +5,6 @@ use bevy::math::EulerRot;
 /// over the top and keeps the chase camera's `look_at` well away from vertical.
 pub const MAX_PITCH: f32 = 1.2;
 
-/// Update `(yaw, pitch)` from a normalized cursor offset where centre = (0,0),
-/// right = +x, down = +y. No roll is ever introduced, so world up stays up.
-pub fn steer(yaw: f32, pitch: f32, cursor_off: Vec2, rate: f32, dt: f32) -> (f32, f32) {
-    let new_yaw = yaw - cursor_off.x * rate * dt;
-    let new_pitch = (pitch - cursor_off.y * rate * dt).clamp(-MAX_PITCH, MAX_PITCH);
-    (new_yaw, new_pitch)
-}
-
 /// Build the ship's rotation from yaw/pitch with world up preserved (no roll).
 /// Forward is `-Z` at neutral, matching Bevy's default facing.
 pub fn ship_rotation(yaw: f32, pitch: f32) -> Quat {
@@ -101,28 +93,6 @@ mod tests {
                 "faces {d:?} (got {fwd:?})"
             );
         }
-    }
-
-    #[test]
-    fn cursor_up_pitches_nose_up_down_pitches_down() {
-        let (y, p) = steer(0.0, 0.0, Vec2::new(0.0, -1.0), 1.0, 0.1);
-        assert!((ship_rotation(y, p) * Vec3::NEG_Z).y > 0.0);
-        let (y, p) = steer(0.0, 0.0, Vec2::new(0.0, 1.0), 1.0, 0.1);
-        assert!((ship_rotation(y, p) * Vec3::NEG_Z).y < 0.0);
-    }
-
-    #[test]
-    fn cursor_right_turns_right_left_turns_left() {
-        let (y, p) = steer(0.0, 0.0, Vec2::new(1.0, 0.0), 1.0, 0.1);
-        assert!((ship_rotation(y, p) * Vec3::NEG_Z).x > 0.0);
-        let (y, p) = steer(0.0, 0.0, Vec2::new(-1.0, 0.0), 1.0, 0.1);
-        assert!((ship_rotation(y, p) * Vec3::NEG_Z).x < 0.0);
-    }
-
-    #[test]
-    fn pitch_is_clamped() {
-        let (_, p) = steer(0.0, 0.0, Vec2::new(0.0, -100.0), 5.0, 1.0);
-        assert!(p <= MAX_PITCH + 1e-6 && p >= -MAX_PITCH - 1e-6);
     }
 
     #[test]

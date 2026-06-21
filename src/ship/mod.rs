@@ -13,8 +13,8 @@ pub struct FlightTuning {
     pub thrust_accel: f32,
     pub strafe_accel: f32,
     pub drag_half_life: f32,
-    pub turn_rate: f32,
-    pub steer_deadzone: f32,
+    /// Radians of turn per pixel of mouse movement (relative mouse-look).
+    pub mouse_sens: f32,
     pub cam_back: f32,
     pub cam_up: f32,
     pub cam_lookahead: f32,
@@ -30,8 +30,7 @@ impl Default for FlightTuning {
             thrust_accel: 2.0e6,
             strafe_accel: 1.0e6,
             drag_half_life: 0.7,
-            turn_rate: 1.2,
-            steer_deadzone: 0.08,
+            mouse_sens: 0.0025,
             // Camera offsets in metres, framed for a ~30 m ship.
             cam_back: 70.0,
             cam_up: 28.0,
