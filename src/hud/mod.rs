@@ -50,6 +50,8 @@ struct CrystalsText;
 struct NearestText;
 #[derive(Component)]
 struct ObjectiveText;
+#[derive(Component)]
+struct LandPromptText;
 
 pub struct HudPlugin;
 
@@ -178,10 +180,29 @@ fn setup_hud(mut commands: Commands) {
                 TextColor(label_color()),
             ));
         });
+
+    // Centered land prompt (shown only when in range, in flight).
+    commands
+        .spawn(Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            top: Val::Percent(58.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        })
+        .with_children(|c| {
+            c.spawn((
+                LandPromptText,
+                Text::new(""),
+                TextFont { font_size: 26.0, ..default() },
+                TextColor(Color::srgb(1.0, 0.9, 0.3)),
+            ));
+        });
 }
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn update_hud(
+    mode: Res<State<crate::onfoot::Mode>>,
     status: Res<ShipStatus>,
     wallet: Res<Wallet>,
     objective: Res<Objective>,
@@ -198,6 +219,7 @@ fn update_hud(
         Query<&mut Text, With<CrystalsText>>,
         Query<&mut Text, With<NearestText>>,
         Query<&mut Text, With<ObjectiveText>>,
+        Query<&mut Text, With<LandPromptText>>,
     )>,
 ) {
     if let Ok(mut n) = shield.get_single_mut() {
@@ -243,5 +265,19 @@ fn update_hud(
     }
     if let Ok(mut t) = texts.p3().get_single_mut() {
         t.0 = objective.0.clone();
+    }
+    // Land prompt: in flight and within landing range of a planet.
+    let nearest_surface = planets
+        .iter()
+        .map(|(p, b)| (p.0 - swp.0).length() - b.radius as f64)
+        .fold(f64::MAX, f64::min);
+    if let Ok(mut t) = texts.p4().get_single_mut() {
+        t.0 = if *mode.get() == crate::onfoot::Mode::Flight
+            && nearest_surface <= crate::onfoot::LAND_RANGE
+        {
+            "\u{25B6} PRESS F TO LAND".into()
+        } else {
+            String::new()
+        };
     }
 }
