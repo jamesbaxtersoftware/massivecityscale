@@ -203,12 +203,14 @@ impl Plugin for OnFootPlugin {
 /// F lands when close enough to a planet surface.
 fn land_input(
     keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
     mut next: ResMut<NextState<Mode>>,
     mut landed: ResMut<LandedBiome>,
     ship: Query<&WorldPos, With<PlayerShip>>,
     planets: Query<(&WorldPos, &PlanetBody)>,
 ) {
-    if !keys.just_pressed(KeyCode::KeyF) {
+    let pad = gamepads.iter().next().is_some_and(|g| g.just_pressed(GamepadButton::North));
+    if !(keys.just_pressed(KeyCode::KeyF) || pad) {
         return;
     }
     let Ok(s) = ship.get_single() else { return };
@@ -225,9 +227,14 @@ fn land_input(
     }
 }
 
-/// F takes off back to flight.
-fn takeoff_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<Mode>>) {
-    if keys.just_pressed(KeyCode::KeyF) {
+/// F / gamepad-Y takes off back to flight.
+fn takeoff_input(
+    keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
+    mut next: ResMut<NextState<Mode>>,
+) {
+    let pad = gamepads.iter().next().is_some_and(|g| g.just_pressed(GamepadButton::North));
+    if keys.just_pressed(KeyCode::KeyF) || pad {
         next.set(Mode::Flight);
     }
 }
@@ -438,6 +445,7 @@ fn walk_avatar(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     foot: Res<FootCam>,
+    gamepads: Query<&Gamepad>,
     mut avatar: Query<&mut Transform, With<Avatar>>,
 ) {
     let Ok(mut tf) = avatar.get_single_mut() else { return };
@@ -457,6 +465,12 @@ fn walk_avatar(
     if keys.pressed(KeyCode::KeyA) {
         dir -= right;
     }
+    if let Some(g) = gamepads.iter().next() {
+        let dz = |v: f32| if v.abs() > 0.2 { v } else { 0.0 };
+        let lx = dz(g.get(GamepadAxis::LeftStickX).unwrap_or(0.0));
+        let ly = dz(g.get(GamepadAxis::LeftStickY).unwrap_or(0.0));
+        dir += fwd * ly + right * lx;
+    }
     if dir.length_squared() > 1e-6 {
         let dir = dir.normalize();
         tf.translation += dir * WALK_SPEED * time.delta_secs();
@@ -469,7 +483,9 @@ fn walk_avatar(
 
 /// Third-person orbit camera with mouse-look around the avatar.
 fn foot_camera(
+    time: Res<Time>,
     mut mouse: EventReader<MouseMotion>,
+    gamepads: Query<&Gamepad>,
     mut foot: ResMut<FootCam>,
     avatar: Query<&Transform, (With<Avatar>, Without<Camera3d>)>,
     mut cam: Query<&mut Transform, With<Camera3d>>,
@@ -480,6 +496,14 @@ fn foot_camera(
     }
     foot.yaw -= delta.x * LOOK_SENS;
     foot.pitch = (foot.pitch + delta.y * LOOK_SENS).clamp(-0.2, 1.2);
+    // Gamepad right stick looks around.
+    if let Some(g) = gamepads.iter().next() {
+        let dz = |v: f32| if v.abs() > 0.2 { v } else { 0.0 };
+        let rx = dz(g.get(GamepadAxis::RightStickX).unwrap_or(0.0));
+        let ry = dz(g.get(GamepadAxis::RightStickY).unwrap_or(0.0));
+        foot.yaw -= rx * 2.2 * time.delta_secs();
+        foot.pitch = (foot.pitch - ry * 2.2 * time.delta_secs()).clamp(-0.2, 1.2);
+    }
 
     let Ok(a) = avatar.get_single() else { return };
     let Ok(mut c) = cam.get_single_mut() else { return };

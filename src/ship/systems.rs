@@ -160,33 +160,44 @@ pub fn flight_input(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     tune: Res<FlightTuning>,
+    gamepads: Query<&Gamepad>,
     mut mouse_motion: EventReader<bevy::input::mouse::MouseMotion>,
     mut ship_q: Query<(&mut Transform, &mut ShipVelocity, &mut ShipControl), With<PlayerShip>>,
 ) {
     use super::physics::MAX_PITCH;
     let dt = time.delta_secs();
     let Ok((mut tf, mut vel, mut ctl)) = ship_q.get_single_mut() else { return };
+    let gp = gamepads.iter().next();
 
-    // Accumulate this frame's mouse movement → relative turn. No movement = no turn.
+    // Mouse: relative turn. No movement = no turn.
     let mut delta = Vec2::ZERO;
     for ev in mouse_motion.read() {
         delta += ev.delta;
     }
     ctl.yaw -= delta.x * tune.mouse_sens;
     ctl.pitch = (ctl.pitch - delta.y * tune.mouse_sens).clamp(-MAX_PITCH, MAX_PITCH);
+    // Gamepad: left stick steers (rate-based).
+    if let Some(g) = gp {
+        let dz = |v: f32| if v.abs() > 0.15 { v } else { 0.0 };
+        let lx = dz(g.get(GamepadAxis::LeftStickX).unwrap_or(0.0));
+        let ly = dz(g.get(GamepadAxis::LeftStickY).unwrap_or(0.0));
+        ctl.yaw -= lx * tune.stick_rate * dt;
+        ctl.pitch = (ctl.pitch + ly * tune.stick_rate * dt).clamp(-MAX_PITCH, MAX_PITCH);
+    }
     tf.rotation = ship_rotation(ctl.yaw, ctl.pitch);
 
-    let boosting = keys.pressed(KeyCode::ShiftLeft);
+    let pad = |b: GamepadButton| gp.is_some_and(|g| g.pressed(b));
+    let boosting = keys.pressed(KeyCode::ShiftLeft) || pad(GamepadButton::South);
     let max_speed = if boosting { tune.base_max_speed * tune.boost_mult } else { tune.base_max_speed };
     let thrust_mag = if boosting { tune.thrust_accel * tune.boost_mult } else { tune.thrust_accel };
 
     let fwd = tf.forward().as_vec3();
     let right = tf.right().as_vec3();
     let mut accel = Vec3::ZERO;
-    if keys.pressed(KeyCode::KeyW) { accel += fwd * thrust_mag; }
-    if keys.pressed(KeyCode::KeyS) { accel -= fwd * thrust_mag; }
-    if keys.pressed(KeyCode::KeyD) { accel += right * tune.strafe_accel; }
-    if keys.pressed(KeyCode::KeyA) { accel -= right * tune.strafe_accel; }
+    if keys.pressed(KeyCode::KeyW) || pad(GamepadButton::RightTrigger2) { accel += fwd * thrust_mag; }
+    if keys.pressed(KeyCode::KeyS) || pad(GamepadButton::LeftTrigger2) { accel -= fwd * thrust_mag; }
+    if keys.pressed(KeyCode::KeyD) || pad(GamepadButton::RightTrigger) { accel += right * tune.strafe_accel; }
+    if keys.pressed(KeyCode::KeyA) || pad(GamepadButton::LeftTrigger) { accel -= right * tune.strafe_accel; }
 
     vel.0 = integrate_velocity(vel.0, accel, tune.drag_half_life, max_speed, dt);
 }
