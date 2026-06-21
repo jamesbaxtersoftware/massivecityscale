@@ -92,9 +92,20 @@ fn dev_screenshot(
     mut autopilot: ResMut<targeting::Autopilot>,
     mut next_phase: ResMut<NextState<battle::Phase>>,
     mut battle_res: ResMut<battle::Battle>,
+    creatures_q: Query<(Entity, &creatures::Creature)>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut exit: EventWriter<AppExit>,
 ) {
+    // GR_BATTLE: once creatures exist, point the battle at a real one (for the camera).
+    if *frame == 6 && std::env::var("GR_BATTLE").is_ok() {
+        if let Some((e, c)) = creatures_q.iter().next() {
+            battle_res.enemy = Some(e);
+            battle_res.kind = Some(c.kind);
+            battle_res.level = c.level;
+            battle_res.hp = c.hp;
+            battle_res.max_hp = c.max_hp;
+        }
+    }
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
     if *frame == 2 && std::env::var("GR_AP").is_ok() {
         // Engage warp-to-target once targets have been populated.

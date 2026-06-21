@@ -14,8 +14,19 @@ use crate::onfoot::Mode;
 pub enum Phase {
     #[default]
     Roam,
+    /// Brief flashy transition before the battle (old-school encounter effect).
+    Encounter,
     Battle,
 }
+
+/// Length of the encounter transition (seconds).
+const ENCOUNTER_DURATION: f32 = 0.9;
+
+#[derive(Resource, Default)]
+struct EncounterTimer(f32);
+
+#[derive(Component)]
+struct EncounterOverlay;
 
 /// The active battle.
 #[derive(Resource, Default)]
@@ -35,13 +46,22 @@ impl Plugin for BattlePlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<Phase>()
             .init_resource::<Battle>()
+            .init_resource::<EncounterTimer>()
             .add_systems(
                 Update,
                 start_battle
                     .run_if(in_state(Mode::OnFoot))
                     .run_if(in_state(Phase::Roam)),
             )
-            .add_systems(Update, battle_input.run_if(in_state(Phase::Battle)))
+            // Encounter transition.
+            .add_systems(OnEnter(Phase::Encounter), spawn_encounter_overlay)
+            .add_systems(OnExit(Phase::Encounter), despawn_encounter_overlay)
+            .add_systems(Update, encounter_anim.run_if(in_state(Phase::Encounter)))
+            // Battle.
+            .add_systems(
+                Update,
+                (battle_input, battle_camera).run_if(in_state(Phase::Battle)),
+            )
             .add_systems(OnEnter(Phase::Battle), spawn_battle_ui)
             .add_systems(OnExit(Phase::Battle), despawn_battle_ui)
             .add_systems(Update, update_battle_ui.run_if(in_state(Phase::Battle)));
@@ -78,7 +98,71 @@ fn start_battle(
         max_hp: c.max_hp,
         bait_bonus: 0.0,
     };
-    next.set(Phase::Battle);
+    next.set(Phase::Encounter);
+}
+
+// ── Encounter transition (screen flash, then cut to battle) ──────────────────
+fn spawn_encounter_overlay(mut commands: Commands, mut timer: ResMut<EncounterTimer>) {
+    timer.0 = 0.0;
+    commands.spawn((
+        EncounterOverlay,
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
+        BackgroundColor(Color::BLACK),
+        GlobalZIndex(1000),
+    ));
+}
+
+fn despawn_encounter_overlay(mut commands: Commands, q: Query<Entity, With<EncounterOverlay>>) {
+    for e in &q {
+        commands.entity(e).despawn();
+    }
+}
+
+/// Strobe the overlay (white/black flashes) then hold black, then cut to battle.
+fn encounter_anim(
+    time: Res<Time>,
+    mut timer: ResMut<EncounterTimer>,
+    mut next: ResMut<NextState<Phase>>,
+    mut overlay: Query<&mut BackgroundColor, With<EncounterOverlay>>,
+) {
+    timer.0 += time.delta_secs();
+    let t = timer.0;
+    let color = if t < 0.55 {
+        // Rapid flash between white and black.
+        if (t * 14.0) as i32 % 2 == 0 {
+            Color::srgb(1.0, 1.0, 1.0)
+        } else {
+            Color::BLACK
+        }
+    } else {
+        Color::BLACK
+    };
+    if let Ok(mut bg) = overlay.get_single_mut() {
+        bg.0 = color;
+    }
+    if t >= ENCOUNTER_DURATION {
+        next.set(Phase::Battle);
+    }
+}
+
+/// Frame the enemy creature for the battle (zoom in from a low angle).
+fn battle_camera(
+    battle: Res<Battle>,
+    creatures: Query<&Transform, (With<Creature>, Without<Camera3d>)>,
+    mut cam: Query<&mut Transform, With<Camera3d>>,
+) {
+    let Some(enemy) = battle.enemy.and_then(|e| creatures.get(e).ok()) else {
+        return;
+    };
+    let Ok(mut c) = cam.get_single_mut() else { return };
+    let focus = enemy.translation + Vec3::Y * 1.0;
+    c.translation = enemy.translation + Vec3::new(2.5, 3.0, 9.0);
+    c.look_at(focus, Vec3::Y);
 }
 
 // ── Battle message log (shown in the UI) ─────────────────────────────────────
