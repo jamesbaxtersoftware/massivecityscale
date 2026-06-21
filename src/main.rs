@@ -44,6 +44,13 @@ fn main() {
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         .add_systems(Startup, setup);
 
+    // On-screen gamepad tester (GR_PADTEST=1): shows live controller input so an
+    // unrecognized pad's buttons/axes can be diagnosed.
+    if std::env::var("GR_PADTEST").is_ok() {
+        app.add_systems(Startup, pad_debug_setup)
+            .add_systems(Update, pad_debug_update);
+    }
+
     // DEV harness (env-gated, never runs in normal play): captures a framebuffer
     // screenshot so the headless dev loop can actually see the rendered scene.
     if std::env::var("GR_SHOT").is_ok() {
@@ -78,6 +85,58 @@ fn setup(mut commands: Commands) {
         DirectionalLight { illuminance: 10_000.0, shadows_enabled: false, ..default() },
         Transform::from_xyz(1.0, 2.0, 1.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
+}
+
+#[derive(Component)]
+struct PadDebugText;
+
+fn pad_debug_setup(mut commands: Commands) {
+    commands.spawn((
+        PadDebugText,
+        Text::new("GAMEPAD TEST: waiting..."),
+        TextFont { font_size: 20.0, ..default() },
+        TextColor(Color::srgb(1.0, 0.9, 0.3)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        GlobalZIndex(2000),
+    ));
+}
+
+fn pad_debug_update(
+    gamepads: Query<&Gamepad>,
+    mut text: Query<&mut Text, With<PadDebugText>>,
+) {
+    let Ok(mut t) = text.get_single_mut() else { return };
+    let n = gamepads.iter().count();
+    let mut s = format!("GAMEPADS DETECTED: {n}\n");
+    if let Some(g) = gamepads.iter().next() {
+        use bevy::input::gamepad::{GamepadAxis as A, GamepadButton as B};
+        let mut pressed = Vec::new();
+        for b in [
+            B::South, B::East, B::West, B::North, B::DPadUp, B::DPadDown, B::DPadLeft,
+            B::DPadRight, B::LeftTrigger, B::RightTrigger, B::LeftTrigger2, B::RightTrigger2,
+            B::Start, B::Select, B::LeftThumb, B::RightThumb,
+        ] {
+            if g.pressed(b) {
+                pressed.push(format!("{b:?}"));
+            }
+        }
+        s += &format!("PRESSED: {}\n", pressed.join(" "));
+        s += &format!(
+            "LX {:.2} LY {:.2}   RX {:.2} RY {:.2}",
+            g.get(A::LeftStickX).unwrap_or(0.0),
+            g.get(A::LeftStickY).unwrap_or(0.0),
+            g.get(A::RightStickX).unwrap_or(0.0),
+            g.get(A::RightStickY).unwrap_or(0.0),
+        );
+    } else {
+        s += "(no gamepad entity — not detected by the engine)";
+    }
+    t.0 = s;
 }
 
 /// DEV-only: optionally teleport the ship (GR_SHIPZ), wait for the scene to settle,
