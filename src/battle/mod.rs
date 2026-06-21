@@ -150,19 +150,24 @@ fn encounter_anim(
     }
 }
 
-/// Frame the enemy creature for the battle (zoom in from a low angle).
+/// Frame the enemy creature for the battle, and turn it to face the camera.
 fn battle_camera(
     battle: Res<Battle>,
-    creatures: Query<&Transform, (With<Creature>, Without<Camera3d>)>,
+    mut creatures: Query<&mut Transform, (With<Creature>, Without<Camera3d>)>,
     mut cam: Query<&mut Transform, With<Camera3d>>,
 ) {
-    let Some(enemy) = battle.enemy.and_then(|e| creatures.get(e).ok()) else {
-        return;
-    };
+    let Some(e) = battle.enemy else { return };
+    let Ok(mut enemy) = creatures.get_mut(e) else { return };
     let Ok(mut c) = cam.get_single_mut() else { return };
-    let focus = enemy.translation + Vec3::Y * 1.0;
-    c.translation = enemy.translation + Vec3::new(2.5, 3.0, 9.0);
-    c.look_at(focus, Vec3::Y);
+    let cam_pos = enemy.translation + Vec3::new(1.2, 1.6, 4.2);
+    c.translation = cam_pos;
+    c.look_at(enemy.translation + Vec3::Y * 0.9, Vec3::Y);
+    // Enemy turns to face the camera so we see its face.
+    let mut to_cam = cam_pos - enemy.translation;
+    to_cam.y = 0.0;
+    if to_cam.length_squared() > 1e-4 {
+        enemy.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, to_cam.normalize());
+    }
 }
 
 // ── Battle message log (shown in the UI) ─────────────────────────────────────

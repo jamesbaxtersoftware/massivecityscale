@@ -179,34 +179,87 @@ fn spawn_creatures(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let body = meshes.add(Capsule3d::new(0.7, 0.9));
+    // Shared part meshes (a little critter: body + head + eyes + 4 legs + horn).
+    let body_mesh = meshes.add(Sphere::new(0.6).mesh().ico(3).unwrap());
+    let head_mesh = meshes.add(Sphere::new(0.42).mesh().ico(3).unwrap());
+    let eye_mesh = meshes.add(Sphere::new(0.1).mesh().ico(2).unwrap());
+    let pupil_mesh = meshes.add(Sphere::new(0.05).mesh().ico(1).unwrap());
+    let leg_mesh = meshes.add(Cuboid::new(0.18, 0.35, 0.18));
+    let horn_mesh = meshes.add(Cone { radius: 0.14, height: 0.4 });
+    let eye_mat = materials.add(StandardMaterial { base_color: Color::WHITE, ..default() });
+    let pupil_mat = materials.add(StandardMaterial { base_color: Color::srgb(0.05, 0.05, 0.08), ..default() });
+    let layer = RenderLayers::layer(SURFACE_LAYER);
+
     let mut rng = rand::thread_rng();
-    for i in 0..COUNT {
+    for _ in 0..COUNT {
         let kind = CreatureKind::pick(rng.gen());
         let level = rng.gen_range(2..18);
         let max_hp = 20.0 + level as f32 * 4.0;
-        let pos = Vec3::new(
-            rng.gen_range(-FIELD..FIELD),
-            1.0,
-            rng.gen_range(-FIELD..FIELD),
-        );
-        commands.spawn((
-            Creature {
-                kind,
-                level,
-                hp: max_hp,
-                max_hp,
-                wander_target: pos,
-                wander_timer: rng.gen_range(0.0..3.0),
-            },
-            RenderLayers::layer(SURFACE_LAYER),
-            Mesh3d(body.clone()),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: kind.color(),
-                ..default()
-            })),
-            Transform::from_translation(pos + Vec3::Y * (i as f32 * 0.0)),
-        ));
+        let pos = Vec3::new(rng.gen_range(-FIELD..FIELD), 0.4, rng.gen_range(-FIELD..FIELD));
+        let body_mat = materials.add(StandardMaterial { base_color: kind.color(), ..default() });
+        let belly = kind.color().mix(&Color::WHITE, 0.35);
+        let belly_mat = materials.add(StandardMaterial { base_color: belly, ..default() });
+
+        commands
+            .spawn((
+                Creature {
+                    kind,
+                    level,
+                    hp: max_hp,
+                    max_hp,
+                    wander_target: pos,
+                    wander_timer: rng.gen_range(0.0..3.0),
+                },
+                layer.clone(),
+                Transform::from_translation(pos),
+                Visibility::default(),
+            ))
+            .with_children(|cr| {
+                // Body (slightly squashed) + head (front-up).
+                cr.spawn((
+                    layer.clone(),
+                    Mesh3d(body_mesh.clone()),
+                    MeshMaterial3d(body_mat.clone()),
+                    Transform::from_xyz(0.0, 0.55, 0.0).with_scale(Vec3::new(1.0, 0.85, 1.15)),
+                ));
+                cr.spawn((
+                    layer.clone(),
+                    Mesh3d(head_mesh.clone()),
+                    MeshMaterial3d(belly_mat.clone()),
+                    Transform::from_xyz(0.0, 0.95, -0.45),
+                ));
+                // Eyes (with pupils) on the front of the head.
+                for sx in [-1.0_f32, 1.0] {
+                    cr.spawn((
+                        layer.clone(),
+                        Mesh3d(eye_mesh.clone()),
+                        MeshMaterial3d(eye_mat.clone()),
+                        Transform::from_xyz(sx * 0.16, 1.02, -0.78),
+                    ));
+                    cr.spawn((
+                        layer.clone(),
+                        Mesh3d(pupil_mesh.clone()),
+                        MeshMaterial3d(pupil_mat.clone()),
+                        Transform::from_xyz(sx * 0.16, 1.02, -0.84),
+                    ));
+                }
+                // Horn (a little flair).
+                cr.spawn((
+                    layer.clone(),
+                    Mesh3d(horn_mesh.clone()),
+                    MeshMaterial3d(body_mat.clone()),
+                    Transform::from_xyz(0.0, 1.35, -0.4),
+                ));
+                // Four stubby legs.
+                for (sx, sz) in [(-1.0_f32, -1.0_f32), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                    cr.spawn((
+                        layer.clone(),
+                        Mesh3d(leg_mesh.clone()),
+                        MeshMaterial3d(body_mat.clone()),
+                        Transform::from_xyz(sx * 0.32, 0.18, sz * 0.3),
+                    ));
+                }
+            });
     }
 }
 
