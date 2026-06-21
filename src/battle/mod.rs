@@ -90,12 +90,14 @@ impl Plugin for BattlePlugin {
     }
 }
 
-pub fn enemy_attack_damage(level: u32) -> f32 {
-    4.0 + level as f32 * 1.5
-}
 /// A move's damage: base power scaled gently by level, times type effectiveness.
 pub fn move_damage(power: f32, level: u32, eff: f32) -> f32 {
     (power + level as f32 * 2.0) * eff
+}
+/// Enemy damage: softer than the player's so a bad type matchup stings without
+/// being an instant KO.
+pub fn enemy_damage(power: f32, level: u32, eff: f32) -> f32 {
+    (power * 0.6 + level as f32) * eff
 }
 
 fn start_battle(
@@ -469,9 +471,13 @@ fn menu_input(
         log.0 = format!("{}  The {kind:?} is too dazed to move!", log.0);
         return;
     }
-    let edmg = enemy_attack_damage(battle.level);
+    let emoves = kind.moves();
+    let m = emoves[rand::random::<u32>() as usize % emoves.len()];
+    let eff = effectiveness(m.element, lead_kind.element());
+    let edmg = enemy_damage(m.power, battle.level, eff);
     stats.hp = (stats.hp - edmg).max(0.0);
-    log.0 = format!("{}  The wild {kind:?} hits back for {edmg:.0}!", log.0);
+    let tag = if eff > 1.0 { "  It's a rough matchup!" } else { "" };
+    log.0 = format!("{}  Wild {kind:?} used {} for {edmg:.0}!{tag}", log.0, m.name);
     if stats.hp <= 0.0 {
         stats.hp = stats.max_hp * 0.5;
         log.0 = "You were overwhelmed — retreated to safety!".into();
@@ -726,8 +732,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn enemy_damage_scales_with_level() {
-        assert!(enemy_attack_damage(10) > enemy_attack_damage(1));
+    fn enemy_damage_scales_and_softer_than_player() {
+        assert!(enemy_damage(18.0, 10, 1.0) > enemy_damage(18.0, 1, 1.0));
+        assert!(enemy_damage(18.0, 5, 2.0) > enemy_damage(18.0, 5, 1.0));
+        // Same move hits softer from the enemy than from the player.
+        assert!(enemy_damage(18.0, 5, 1.0) < move_damage(18.0, 5, 1.0));
     }
 
     #[test]
