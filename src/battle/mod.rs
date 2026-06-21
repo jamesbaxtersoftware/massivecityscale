@@ -497,6 +497,8 @@ struct PlayerLine;
 #[derive(Component)]
 struct EnemyHpFill;
 #[derive(Component)]
+struct PlayerHpFill;
+#[derive(Component)]
 struct MenuCell(usize);
 #[derive(Component)]
 struct MenuLabel(usize);
@@ -583,6 +585,22 @@ fn spawn_battle_ui(mut commands: Commands, mut menu: ResMut<Menu>, mut log: ResM
                             TextFont { font_size: 16.0, ..default() },
                             TextColor(Color::srgb(0.7, 0.85, 1.0)),
                         ));
+                        // Your HP bar, mirroring the enemy's.
+                        box_.spawn((
+                            Node { width: Val::Px(260.0), height: Val::Px(12.0), ..default() },
+                            BackgroundColor(Color::srgba(0.08, 0.10, 0.16, 0.9)),
+                        ))
+                        .with_children(|track| {
+                            track.spawn((
+                                PlayerHpFill,
+                                Node {
+                                    width: Val::Percent(100.0),
+                                    height: Val::Percent(100.0),
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgb(0.3, 0.9, 0.4)),
+                            ));
+                        });
                     });
 
                 // 2x2 menu grid.
@@ -636,6 +654,17 @@ fn despawn_battle_ui(mut commands: Commands, q: Query<Entity, With<BattleUi>>) {
     }
 }
 
+/// HP bar colour: green when healthy, yellow when low, red when critical.
+fn hp_color(frac: f32) -> Color {
+    if frac > 0.5 {
+        Color::srgb(0.3, 0.9, 0.4)
+    } else if frac > 0.2 {
+        Color::srgb(0.95, 0.8, 0.2)
+    } else {
+        Color::srgb(0.9, 0.3, 0.25)
+    }
+}
+
 #[allow(clippy::type_complexity)]
 fn update_battle_ui(
     battle: Res<Battle>,
@@ -644,8 +673,18 @@ fn update_battle_ui(
     menu: Res<Menu>,
     log: Res<BattleLog>,
     collection: Res<Collection>,
-    mut hpbar: Query<(&mut Node, &mut BackgroundColor), (With<EnemyHpFill>, Without<MenuCell>)>,
-    mut cells: Query<(&MenuCell, &mut BackgroundColor, &mut BorderColor), Without<EnemyHpFill>>,
+    mut hpbar: Query<
+        (&mut Node, &mut BackgroundColor),
+        (With<EnemyHpFill>, Without<MenuCell>, Without<PlayerHpFill>),
+    >,
+    mut playerbar: Query<
+        (&mut Node, &mut BackgroundColor),
+        (With<PlayerHpFill>, Without<MenuCell>, Without<EnemyHpFill>),
+    >,
+    mut cells: Query<
+        (&MenuCell, &mut BackgroundColor, &mut BorderColor),
+        (Without<EnemyHpFill>, Without<PlayerHpFill>),
+    >,
     mut q: ParamSet<(
         Query<&mut Text, With<EnemyLine>>,
         Query<&mut Text, With<LogLine>>,
@@ -657,13 +696,12 @@ fn update_battle_ui(
     let frac = (battle.hp / battle.max_hp.max(1.0)).clamp(0.0, 1.0);
     if let Ok((mut n, mut col)) = hpbar.get_single_mut() {
         n.width = Val::Percent(frac * 100.0);
-        col.0 = if frac > 0.5 {
-            Color::srgb(0.3, 0.9, 0.4)
-        } else if frac > 0.2 {
-            Color::srgb(0.95, 0.8, 0.2)
-        } else {
-            Color::srgb(0.9, 0.3, 0.25)
-        };
+        col.0 = hp_color(frac);
+    }
+    let pfrac = (stats.hp / stats.max_hp.max(1.0)).clamp(0.0, 1.0);
+    if let Ok((mut n, mut col)) = playerbar.get_single_mut() {
+        n.width = Val::Percent(pfrac * 100.0);
+        col.0 = hp_color(pfrac);
     }
     if let Ok(mut t) = q.p0().get_single_mut() {
         t.0 = format!("Wild {kind:?}   Lv{}", battle.level);
