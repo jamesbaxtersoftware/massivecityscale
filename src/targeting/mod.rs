@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::math::DVec3;
 use bevy::ecs::schedule::IntoSystemConfigs;
 use crate::galaxy::PlanetBody;
-use crate::origin::{FrameSet, WorldPos};
+use crate::origin::{FloatingOrigin, FrameSet, WorldPos};
 use crate::ship::physics::{look_yaw_pitch, ship_rotation};
 use crate::ship::{FlightTuning, PlayerShip, ShipControl, ShipVelocity};
 
@@ -25,19 +25,70 @@ pub struct Autopilot {
     pub on: bool,
 }
 
+/// The reusable lock-on ring drawn around the selected target.
+#[derive(Component)]
+struct TargetMarker;
+
 pub struct TargetingPlugin;
 
 impl Plugin for TargetingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Targets>()
             .init_resource::<Autopilot>()
+            .add_systems(Startup, spawn_marker)
             .add_systems(Update, (update_targets, cycle_target, engage_warp).in_set(FrameSet::Input))
             .add_systems(
                 Update,
                 autopilot_fly
                     .in_set(FrameSet::Move)
                     .before(crate::ship::systems::ship_move),
-            );
+            )
+            // After the camera so the billboard faces it.
+            .add_systems(Update, update_marker.in_set(FrameSet::Stream));
+    }
+}
+
+fn spawn_marker(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    commands.spawn((
+        TargetMarker,
+        Mesh3d(meshes.add(Torus { minor_radius: 0.02, major_radius: 1.0 })),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 0.85, 0.2),
+            emissive: LinearRgba::rgb(3.0, 2.4, 0.4),
+            unlit: true,
+            ..default()
+        })),
+        Transform::default(),
+        Visibility::Hidden,
+    ));
+}
+
+/// Place the lock-on ring around the selected target, billboarded to the camera.
+fn update_marker(
+    origin: Res<FloatingOrigin>,
+    targets: Res<Targets>,
+    planets: Query<(&WorldPos, &PlanetBody), Without<TargetMarker>>,
+    cam: Query<&Transform, (With<Camera3d>, Without<TargetMarker>)>,
+    mut marker: Query<(&mut Transform, &mut Visibility), (With<TargetMarker>, Without<Camera3d>)>,
+) {
+    let Ok((mut mtf, mut vis)) = marker.get_single_mut() else { return };
+    let Some((twp, body)) = targets.selected.and_then(|e| planets.get(e).ok()) else {
+        *vis = Visibility::Hidden;
+        return;
+    };
+    *vis = Visibility::Visible;
+    let render_pos = (twp.0 - origin.0).as_vec3();
+    mtf.translation = render_pos;
+    mtf.scale = Vec3::splat(body.radius * 1.35);
+    let cam_pos = cam.get_single().map(|t| t.translation).unwrap_or(Vec3::ZERO);
+    let to_cam = (cam_pos - render_pos).normalize_or_zero();
+    if to_cam != Vec3::ZERO {
+        // Torus axis is Y; aim it at the camera so the ring reads as a circle.
+        mtf.rotation = Quat::from_rotation_arc(Vec3::Y, to_cam);
     }
 }
 
