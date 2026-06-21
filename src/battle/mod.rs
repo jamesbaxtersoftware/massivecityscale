@@ -36,6 +36,7 @@ pub struct Battle {
     pub max_hp: f32,
     pub bait_bonus: f32,
     pub hit_timer: f32,
+    pub player_lunge: f32,
     pub enemy_stunned: bool,
 }
 
@@ -80,7 +81,8 @@ impl Plugin for BattlePlugin {
             .add_systems(Update, encounter_anim.run_if(in_state(Phase::Encounter)))
             .add_systems(
                 Update,
-                (menu_input, battle_camera, update_battle_ui).run_if(in_state(Phase::Battle)),
+                (menu_input, battle_camera, animate_player_creature, update_battle_ui)
+                    .run_if(in_state(Phase::Battle)),
             )
             .add_systems(OnEnter(Phase::Battle), (spawn_battle_ui, spawn_player_creature))
             .add_systems(OnExit(Phase::Battle), (despawn_battle_ui, despawn_player_creature));
@@ -117,6 +119,7 @@ fn start_battle(
         max_hp: c.max_hp,
         bait_bonus: 0.0,
         hit_timer: 0.0,
+        player_lunge: 0.0,
         enemy_stunned: false,
     };
     next.set(Phase::Encounter);
@@ -191,9 +194,18 @@ fn battle_camera(
     }
 }
 
+const LUNGE_DURATION: f32 = 0.28;
+
 // ── Player's creature in the VS frame ────────────────────────────────────────
 #[derive(Component)]
 struct PlayerBattleCreature;
+
+/// Rest pose of the buddy, so the attack lunge can spring out and back.
+#[derive(Component)]
+struct CreatureRest {
+    pos: Vec3,
+    fwd: Vec3,
+}
 
 /// Spawn the lead party creature in the foreground, back to the camera, facing
 /// the enemy — classic Pokémon VS staging.
@@ -224,6 +236,7 @@ fn spawn_player_creature(
     commands
         .spawn((
             PlayerBattleCreature,
+            CreatureRest { pos, fwd: rot * Vec3::NEG_Z },
             layer.clone(),
             Transform { translation: pos, rotation: rot, scale: Vec3::splat(1.3) },
             Visibility::default(),
@@ -236,6 +249,24 @@ fn spawn_player_creature(
 fn despawn_player_creature(mut commands: Commands, q: Query<Entity, With<PlayerBattleCreature>>) {
     for e in &q {
         commands.entity(e).despawn_recursive();
+    }
+}
+
+/// Spring the buddy forward and back along its facing while the lunge timer runs.
+fn animate_player_creature(
+    time: Res<Time>,
+    mut battle: ResMut<Battle>,
+    mut q: Query<(&mut Transform, &CreatureRest), With<PlayerBattleCreature>>,
+) {
+    let Ok((mut t, rest)) = q.get_single_mut() else { return };
+    if battle.player_lunge > 0.0 {
+        battle.player_lunge = (battle.player_lunge - time.delta_secs()).max(0.0);
+        // k: 1 at start -> 0 at end; sin(pi*k) eases out to a peak mid-lunge.
+        let k = battle.player_lunge / LUNGE_DURATION;
+        let amt = (std::f32::consts::PI * k).sin() * 0.9;
+        t.translation = rest.pos + rest.fwd * amt;
+    } else {
+        t.translation = rest.pos;
     }
 }
 
@@ -338,6 +369,7 @@ fn menu_input(
             let dmg = player_attack_damage(stats.level) * eff;
             battle.hp = (battle.hp - dmg).max(0.0);
             battle.hit_timer = 0.22;
+            battle.player_lunge = LUNGE_DURATION;
             let tag = match eff {
                 e if e > 1.0 => "  Super effective!",
                 e if e < 1.0 => "  Not very effective...",

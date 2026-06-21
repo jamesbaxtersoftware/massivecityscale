@@ -244,6 +244,7 @@ fn dev_screenshot(
                 max_hp: 52.0,
                 bait_bonus: 0.0,
                 hit_timer: 0.0,
+                player_lunge: 0.0,
                 enemy_stunned: false,
             };
         }
@@ -268,6 +269,11 @@ fn dev_screenshot(
         for (i, p) in g.planets.iter().enumerate() {
             eprintln!("PLANET {i}: pos={:?} radius={:.0} kind={:?}", p.pos, p.radius, p.kind);
         }
+    }
+    // GR_BATTLE: drive the attack animation so the capture frame shows mid-lunge.
+    if *frame == 89 && std::env::var("GR_BATTLE").is_ok() {
+        battle_res.player_lunge = 0.16;
+        battle_res.hit_timer = 0.12;
     }
     if *frame == 90 {
         if let Ok((wp, _, _)) = ship.get_single() {
