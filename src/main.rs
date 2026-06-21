@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 mod galaxy;
+mod hud;
 mod origin;
 mod palette;
 mod pause;
@@ -29,6 +30,7 @@ fn main() {
         .add_plugins(pause::PauseMenuPlugin)
         .add_plugins(spacefx::SpaceFxPlugin)
         .add_plugins(warp::WarpPlugin)
+        .add_plugins(hud::HudPlugin)
         .add_plugins(pixelate::PixelatePlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
