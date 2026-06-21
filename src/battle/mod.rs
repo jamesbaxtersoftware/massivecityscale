@@ -38,6 +38,8 @@ pub struct Battle {
     pub max_hp: f32,
     /// Extra capture chance from Bait, this battle.
     pub bait_bonus: f32,
+    /// Counts down after a hit for a brief scale-punch reaction.
+    pub hit_timer: f32,
 }
 
 pub struct BattlePlugin;
@@ -97,6 +99,7 @@ fn start_battle(
         hp: c.hp,
         max_hp: c.max_hp,
         bait_bonus: 0.0,
+        hit_timer: 0.0,
     };
     next.set(Phase::Encounter);
 }
@@ -150,9 +153,10 @@ fn encounter_anim(
     }
 }
 
-/// Frame the enemy creature for the battle, and turn it to face the camera.
+/// Frame the enemy creature, turn it to face the camera, and punch its scale on hit.
 fn battle_camera(
-    battle: Res<Battle>,
+    time: Res<Time>,
+    mut battle: ResMut<Battle>,
     mut creatures: Query<&mut Transform, (With<Creature>, Without<Camera3d>)>,
     mut cam: Query<&mut Transform, With<Camera3d>>,
 ) {
@@ -167,6 +171,14 @@ fn battle_camera(
     to_cam.y = 0.0;
     if to_cam.length_squared() > 1e-4 {
         enemy.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, to_cam.normalize());
+    }
+    // Hit reaction: a quick squash-stretch.
+    if battle.hit_timer > 0.0 {
+        battle.hit_timer = (battle.hit_timer - time.delta_secs()).max(0.0);
+        let k = battle.hit_timer / 0.22;
+        enemy.scale = Vec3::new(1.0 + 0.3 * k, 1.0 - 0.2 * k, 1.0 + 0.3 * k);
+    } else {
+        enemy.scale = Vec3::ONE;
     }
 }
 
@@ -198,6 +210,7 @@ fn battle_input(
             .unwrap_or(1.0);
         let dmg = player_attack_damage(stats.level) * eff;
         battle.hp = (battle.hp - dmg).max(0.0);
+        battle.hit_timer = 0.22;
         let tag = match eff {
             e if e > 1.0 => "  It's super effective!",
             e if e < 1.0 => "  It's not very effective...",
@@ -290,6 +303,8 @@ struct LogLine;
 struct PlayerLine;
 #[derive(Component)]
 struct MenuLine;
+#[derive(Component)]
+struct EnemyHpFill;
 
 fn spawn_battle_ui(mut commands: Commands) {
     commands.init_resource::<BattleLog>();
@@ -307,13 +322,33 @@ fn spawn_battle_ui(mut commands: Commands) {
             },
         ))
         .with_children(|c| {
-            // Enemy (top).
+            // Enemy (top): name/level line + HP bar.
             c.spawn((
                 EnemyLine,
                 Text::new(""),
                 TextFont { font_size: 26.0, ..default() },
                 TextColor(Color::srgb(1.0, 0.9, 0.85)),
             ));
+            c.spawn((
+                Node {
+                    width: Val::Px(280.0),
+                    height: Val::Px(16.0),
+                    margin: UiRect::top(Val::Px(6.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.08, 0.10, 0.16, 0.9)),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    EnemyHpFill,
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.3, 0.9, 0.4)),
+                ));
+            });
             // Message + menu (bottom block).
             c.spawn(Node {
                 flex_direction: FlexDirection::Column,
@@ -355,6 +390,7 @@ fn update_battle_ui(
     stats: Res<PlayerStats>,
     inv: Res<Inventory>,
     log: Res<BattleLog>,
+    mut hpbar: Query<(&mut Node, &mut BackgroundColor), With<EnemyHpFill>>,
     mut q: ParamSet<(
         Query<&mut Text, With<EnemyLine>>,
         Query<&mut Text, With<LogLine>>,
@@ -363,11 +399,19 @@ fn update_battle_ui(
     )>,
 ) {
     let kind = battle.kind.unwrap_or(CreatureKind::Grasshog);
+    let frac = (battle.hp / battle.max_hp.max(1.0)).clamp(0.0, 1.0);
+    if let Ok((mut n, mut col)) = hpbar.get_single_mut() {
+        n.width = Val::Percent(frac * 100.0);
+        col.0 = if frac > 0.5 {
+            Color::srgb(0.3, 0.9, 0.4)
+        } else if frac > 0.2 {
+            Color::srgb(0.95, 0.8, 0.2)
+        } else {
+            Color::srgb(0.9, 0.3, 0.25)
+        };
+    }
     if let Ok(mut t) = q.p0().get_single_mut() {
-        t.0 = format!(
-            "Wild {kind:?}   Lv{}\nHP {:.0}/{:.0}",
-            battle.level, battle.hp, battle.max_hp
-        );
+        t.0 = format!("Wild {kind:?}   Lv{}", battle.level);
     }
     if let Ok(mut t) = q.p1().get_single_mut() {
         t.0 = log.0.clone();
