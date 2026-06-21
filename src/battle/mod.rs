@@ -3,12 +3,13 @@
 //! the menu with arrows / D-pad, confirm with Enter / A, back out with Esc / B.
 
 use bevy::prelude::*;
+use bevy::render::view::RenderLayers;
 use crate::creatures::{
-    capture_chance, effectiveness, gain_exp, CaughtCreature, Collection, Creature, CreatureKind,
-    Engaged, Inventory, PlayerStats, CAPTURE_REWARD,
+    build_creature_children, capture_chance, effectiveness, gain_exp, CaughtCreature, Collection,
+    Creature, CreatureKind, Engaged, Inventory, PlayerStats, CAPTURE_REWARD,
 };
 use crate::hud::Wallet;
-use crate::onfoot::Mode;
+use crate::onfoot::{Mode, SURFACE_LAYER};
 
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Phase {
@@ -81,8 +82,8 @@ impl Plugin for BattlePlugin {
                 Update,
                 (menu_input, battle_camera, update_battle_ui).run_if(in_state(Phase::Battle)),
             )
-            .add_systems(OnEnter(Phase::Battle), spawn_battle_ui)
-            .add_systems(OnExit(Phase::Battle), despawn_battle_ui);
+            .add_systems(OnEnter(Phase::Battle), (spawn_battle_ui, spawn_player_creature))
+            .add_systems(OnExit(Phase::Battle), (despawn_battle_ui, despawn_player_creature));
     }
 }
 
@@ -173,9 +174,9 @@ fn battle_camera(
     let Some(e) = battle.enemy else { return };
     let Ok(mut enemy) = creatures.get_mut(e) else { return };
     let Ok(mut c) = cam.get_single_mut() else { return };
-    let cam_pos = enemy.translation + Vec3::new(1.2, 1.6, 4.2);
+    let cam_pos = enemy.translation + Vec3::new(0.2, 1.7, 4.6);
     c.translation = cam_pos;
-    c.look_at(enemy.translation + Vec3::Y * 0.9, Vec3::Y);
+    c.look_at(enemy.translation + Vec3::Y * 0.8, Vec3::Y);
     let mut to_cam = cam_pos - enemy.translation;
     to_cam.y = 0.0;
     if to_cam.length_squared() > 1e-4 {
@@ -187,6 +188,54 @@ fn battle_camera(
         enemy.scale = Vec3::new(1.0 + 0.3 * k, 1.0 - 0.2 * k, 1.0 + 0.3 * k);
     } else {
         enemy.scale = Vec3::ONE;
+    }
+}
+
+// ── Player's creature in the VS frame ────────────────────────────────────────
+#[derive(Component)]
+struct PlayerBattleCreature;
+
+/// Spawn the lead party creature in the foreground, back to the camera, facing
+/// the enemy — classic Pokémon VS staging.
+fn spawn_player_creature(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    collection: Res<Collection>,
+    battle: Res<Battle>,
+    enemies: Query<&Transform, With<Creature>>,
+) {
+    let Some(lead) = collection.party.first() else { return };
+    let Some(e) = battle.enemy else { return };
+    let Ok(enemy_t) = enemies.get(e) else { return };
+    let layer = RenderLayers::layer(SURFACE_LAYER);
+    let base = enemy_t.translation;
+    // Foreground lower-left: left of the enemy, between it and the camera, sized
+    // up so its back fills the corner above the message box.
+    let pos = base + Vec3::new(-1.1, 0.0, 2.5);
+    let mut to_enemy = base - pos;
+    to_enemy.y = 0.0;
+    let rot = if to_enemy.length_squared() > 1e-4 {
+        Quat::from_rotation_arc(Vec3::NEG_Z, to_enemy.normalize())
+    } else {
+        Quat::IDENTITY
+    };
+    let kind = lead.kind;
+    commands
+        .spawn((
+            PlayerBattleCreature,
+            layer.clone(),
+            Transform { translation: pos, rotation: rot, scale: Vec3::splat(1.3) },
+            Visibility::default(),
+        ))
+        .with_children(|cr| {
+            build_creature_children(cr, &mut meshes, &mut materials, kind.color(), &layer);
+        });
+}
+
+fn despawn_player_creature(mut commands: Commands, q: Query<Entity, With<PlayerBattleCreature>>) {
+    for e in &q {
+        commands.entity(e).despawn_recursive();
     }
 }
 
@@ -536,6 +585,7 @@ fn update_battle_ui(
     inv: Res<Inventory>,
     menu: Res<Menu>,
     log: Res<BattleLog>,
+    collection: Res<Collection>,
     mut hpbar: Query<(&mut Node, &mut BackgroundColor), (With<EnemyHpFill>, Without<MenuCell>)>,
     mut cells: Query<(&MenuCell, &mut BackgroundColor, &mut BorderColor), Without<EnemyHpFill>>,
     mut q: ParamSet<(
@@ -564,7 +614,15 @@ fn update_battle_ui(
         t.0 = log.0.clone();
     }
     if let Ok(mut t) = q.p2().get_single_mut() {
-        t.0 = format!("YOU   HP {:.0}/{:.0}   SP {:.0}/{:.0}", stats.hp, stats.max_hp, stats.sp, stats.max_sp);
+        let lead = collection
+            .party
+            .first()
+            .map(|l| format!("{} Lv{}   ", l.kind.name(), l.level))
+            .unwrap_or_default();
+        t.0 = format!(
+            "{lead}YOU  HP {:.0}/{:.0}  SP {:.0}/{:.0}",
+            stats.hp, stats.max_hp, stats.sp, stats.max_sp
+        );
     }
 
     let main = [

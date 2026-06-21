@@ -198,6 +198,9 @@ fn dev_screenshot(
             battle_res.hp = c.hp;
             battle_res.max_hp = c.max_hp;
         }
+        // Enter Battle now that a real enemy is assigned, so OnEnter(Battle)
+        // (which spawns the player's VS creature) sees a valid enemy entity.
+        next_phase.set(battle::Phase::Battle);
     }
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
     if *frame == 2 && std::env::var("GR_AP").is_ok() {
@@ -218,7 +221,7 @@ fn dev_screenshot(
             };
         }
         if std::env::var("GR_BATTLE").is_ok() {
-            next_phase.set(battle::Phase::Battle);
+            // Phase::Battle is entered at frame 6, after a real enemy is assigned.
             *battle_res = battle::Battle {
                 enemy: None,
                 kind: Some(creatures::CreatureKind::Flarehog),
