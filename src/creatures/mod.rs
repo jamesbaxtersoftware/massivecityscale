@@ -195,7 +195,8 @@ fn spawn_creatures(
         let kind = CreatureKind::pick(rng.gen());
         let level = rng.gen_range(2..18);
         let max_hp = 20.0 + level as f32 * 4.0;
-        let pos = Vec3::new(rng.gen_range(-FIELD..FIELD), 0.4, rng.gen_range(-FIELD..FIELD));
+        let (cx, cz) = (rng.gen_range(-FIELD..FIELD), rng.gen_range(-FIELD..FIELD));
+        let pos = Vec3::new(cx, crate::onfoot::surface_height(cx, cz), cz);
         let body_mat = materials.add(StandardMaterial { base_color: kind.color(), ..default() });
         let belly = kind.color().mix(&Color::WHITE, 0.35);
         let belly_mat = materials.add(StandardMaterial { base_color: belly, ..default() });
@@ -288,6 +289,7 @@ fn wander(time: Res<Time>, mut q: Query<(&mut Creature, &mut Transform)>) {
         if flat.length() > 1.0 {
             let step = flat.normalize() * WANDER_SPEED * dt;
             tf.translation += step;
+            tf.translation.y = crate::onfoot::surface_height(tf.translation.x, tf.translation.z);
             tf.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, flat.normalize());
         }
     }

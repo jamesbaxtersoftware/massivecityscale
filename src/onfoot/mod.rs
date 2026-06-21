@@ -5,7 +5,10 @@
 use bevy::prelude::*;
 use bevy::ecs::schedule::{IntoSystemConfigs, IntoSystemSetConfigs};
 use bevy::input::mouse::MouseMotion;
+use bevy::render::mesh::{Indices, PrimitiveTopology};
+use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::view::RenderLayers;
+use noise::{NoiseFn, Perlin};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use crate::galaxy::PlanetBody;
@@ -17,8 +20,63 @@ pub const SURFACE_LAYER: usize = 1;
 /// Land when the ship is within this surface distance (m) of a planet.
 pub const LAND_RANGE: f64 = 5.0e6;
 const WALK_SPEED: f32 = 14.0;
-const GROUND_HALF: f32 = 1800.0;
+const GROUND_HALF: f32 = 230.0;
 const LOOK_SENS: f32 = 0.005;
+
+/// Rolling-terrain height at a surface (x, z), in metres. Gentle hills.
+pub fn surface_height(x: f32, z: f32) -> f32 {
+    let p = Perlin::new(7);
+    let a = p.get([(x * 0.012) as f64, (z * 0.012) as f64]) as f32;
+    let b = p.get([(x * 0.045) as f64, (z * 0.045) as f64]) as f32 * 0.35;
+    (a + b) * 5.0
+}
+
+/// Build a displaced grid mesh of the local ground using `surface_height`.
+fn build_terrain_mesh(half: f32, res: u32) -> Mesh {
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+    let step = half * 2.0 / res as f32;
+    for iz in 0..=res {
+        for ix in 0..=res {
+            let x = -half + ix as f32 * step;
+            let z = -half + iz as f32 * step;
+            positions.push([x, surface_height(x, z), z]);
+        }
+    }
+    let row = res + 1;
+    for iz in 0..res {
+        for ix in 0..res {
+            let a = iz * row + ix;
+            let b = a + row;
+            // Wound so normals point up.
+            indices.extend_from_slice(&[a, b, a + 1, a + 1, b, b + 1]);
+        }
+    }
+    // Smooth normals from the displaced geometry.
+    let mut acc = vec![Vec3::ZERO; positions.len()];
+    for tri in indices.chunks(3) {
+        let (i0, i1, i2) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+        let p0 = Vec3::from(positions[i0]);
+        let p1 = Vec3::from(positions[i1]);
+        let p2 = Vec3::from(positions[i2]);
+        let n = (p1 - p0).cross(p2 - p0);
+        acc[i0] += n;
+        acc[i1] += n;
+        acc[i2] += n;
+    }
+    let normals: Vec<[f32; 3]> = acc
+        .iter()
+        .map(|n| {
+            let u = n.normalize_or_zero();
+            [u.x, u.y, u.z]
+        })
+        .collect();
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh
+}
 
 /// Orbit angles for the third-person foot camera (mouse-look).
 #[derive(Resource)]
@@ -124,17 +182,18 @@ fn enter_onfoot(
         commands.entity(cam).insert(layer.clone());
     }
 
-    // Ground.
+    // Rolling terrain ground.
     commands.spawn((
         SurfaceEntity,
         layer.clone(),
-        Mesh3d(meshes.add(Cuboid::new(GROUND_HALF * 2.0, 2.0, GROUND_HALF * 2.0))),
+        Mesh3d(meshes.add(build_terrain_mesh(GROUND_HALF + 40.0, 120))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.34, 0.56, 0.28),
             perceptual_roughness: 0.95,
+            cull_mode: None,
             ..default()
         })),
-        Transform::from_xyz(0.0, -1.0, 0.0),
+        Transform::default(),
     ));
 
     // Avatar: a little blocky figure (body + head) so it reads as a character.
@@ -143,7 +202,7 @@ fn enter_onfoot(
             SurfaceEntity,
             Avatar,
             layer.clone(),
-            Transform::from_xyz(0.0, 0.0, 0.0),
+            Transform::from_xyz(0.0, surface_height(0.0, 0.0), 0.0),
             Visibility::default(),
         ))
         .with_children(|a| {
@@ -229,7 +288,8 @@ fn enter_onfoot(
                     layer.clone(),
                     Mesh3d(rock_mesh.clone()),
                     MeshMaterial3d(rock_mat.clone()),
-                    Transform::from_xyz(x, s * 0.5, z).with_scale(Vec3::splat(s)),
+                    Transform::from_xyz(x, surface_height(x, z) + s * 0.5, z)
+                        .with_scale(Vec3::splat(s)),
                 ));
             }
             1 => {
@@ -240,7 +300,7 @@ fn enter_onfoot(
                         layer.clone(),
                         Mesh3d(trunk_mesh.clone()),
                         MeshMaterial3d(trunk_mat.clone()),
-                        Transform::from_xyz(x, 1.5, z),
+                        Transform::from_xyz(x, surface_height(x, z) + 1.5, z),
                     ))
                     .with_children(|t| {
                         t.spawn((
@@ -259,7 +319,8 @@ fn enter_onfoot(
                     layer.clone(),
                     Mesh3d(bush_mesh.clone()),
                     MeshMaterial3d(bush_mat.clone()),
-                    Transform::from_xyz(x, s * 0.5, z).with_scale(Vec3::splat(s)),
+                    Transform::from_xyz(x, surface_height(x, z) + s * 0.5, z)
+                        .with_scale(Vec3::splat(s)),
                 ));
             }
         }
@@ -310,6 +371,7 @@ fn walk_avatar(
         tf.translation += dir * WALK_SPEED * time.delta_secs();
         tf.translation.x = tf.translation.x.clamp(-GROUND_HALF, GROUND_HALF);
         tf.translation.z = tf.translation.z.clamp(-GROUND_HALF, GROUND_HALF);
+        tf.translation.y = surface_height(tf.translation.x, tf.translation.z);
         tf.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, dir);
     }
 }
