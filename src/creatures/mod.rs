@@ -57,12 +57,16 @@ impl CreatureKind {
             CreatureKind::Flarehog => Color::srgb(0.9, 0.45, 0.2),
         }
     }
-    fn pick(n: u32) -> Self {
-        match n % 4 {
-            0 => CreatureKind::Grasshog,
-            1 => CreatureKind::Aquabud,
-            2 => CreatureKind::Rockfang,
-            _ => CreatureKind::Flarehog,
+    /// Weighted pool for a biome, so creatures suit the world you land on.
+    fn biome_pool(biome: crate::onfoot::Biome) -> &'static [CreatureKind] {
+        use crate::onfoot::Biome::*;
+        use CreatureKind::*;
+        match biome {
+            Grass => &[Grasshog, Grasshog, Grasshog, Aquabud, Flarehog],
+            Desert => &[Rockfang, Rockfang, Flarehog, Flarehog, Grasshog],
+            Tundra => &[Aquabud, Aquabud, Aquabud, Rockfang, Grasshog],
+            Volcanic => &[Flarehog, Flarehog, Flarehog, Rockfang, Aquabud],
+            Alien => &[Grasshog, Aquabud, Rockfang, Flarehog],
         }
     }
 }
@@ -176,9 +180,11 @@ impl Plugin for CreaturesPlugin {
 
 fn spawn_creatures(
     mut commands: Commands,
+    biome: Res<crate::onfoot::LandedBiome>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let pool = CreatureKind::biome_pool(biome.0);
     // Shared part meshes (a little critter: body + head + eyes + 4 legs + horn).
     let body_mesh = meshes.add(Sphere::new(0.6).mesh().ico(3).unwrap());
     let head_mesh = meshes.add(Sphere::new(0.42).mesh().ico(3).unwrap());
@@ -192,7 +198,7 @@ fn spawn_creatures(
 
     let mut rng = rand::thread_rng();
     for _ in 0..COUNT {
-        let kind = CreatureKind::pick(rng.gen());
+        let kind = pool[rng.gen_range(0..pool.len())];
         let level = rng.gen_range(2..18);
         let max_hp = 20.0 + level as f32 * 4.0;
         let (cx, cz) = (rng.gen_range(-FIELD..FIELD), rng.gen_range(-FIELD..FIELD));
