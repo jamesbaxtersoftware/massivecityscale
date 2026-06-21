@@ -319,6 +319,30 @@ fn enter_onfoot(
         Transform::from_xyz(-700.0, 460.0, -1400.0),
     ));
 
+    // Clouds: flattened bright puffs high in the sky.
+    let cloud_mesh = meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap());
+    let cloud_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(1.0, 1.0, 1.0),
+        emissive: LinearRgba::rgb(0.5, 0.52, 0.55),
+        unlit: true,
+        ..default()
+    });
+    let mut crng = ChaCha8Rng::seed_from_u64(0xC10D);
+    for _ in 0..18 {
+        let x = crng.gen_range(-1100.0..1100.0_f32);
+        let z = crng.gen_range(-1100.0..1100.0_f32);
+        let y = crng.gen_range(45.0..95.0_f32);
+        let w = crng.gen_range(35.0..80.0_f32);
+        commands.spawn((
+            SurfaceEntity,
+            layer.clone(),
+            bevy::pbr::NotShadowCaster,
+            Mesh3d(cloud_mesh.clone()),
+            MeshMaterial3d(cloud_mat.clone()),
+            Transform::from_xyz(x, y, z).with_scale(Vec3::new(w, w * 0.35, w * 0.7)),
+        ));
+    }
+
     // Scatter rocks, trees and bushes near the landing site for terrain feel.
     let rock_mesh = meshes.add(Sphere::new(1.0).mesh().ico(1).unwrap());
     let bush_mesh = meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap());
