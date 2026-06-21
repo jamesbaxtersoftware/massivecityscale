@@ -41,6 +41,23 @@ pub fn effectiveness(atk: Element, def: Element) -> f32 {
 }
 
 impl CreatureKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            CreatureKind::Grasshog => "Grasshog",
+            CreatureKind::Aquabud => "Aquabud",
+            CreatureKind::Rockfang => "Rockfang",
+            CreatureKind::Flarehog => "Flarehog",
+        }
+    }
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s {
+            "Grasshog" => Some(CreatureKind::Grasshog),
+            "Aquabud" => Some(CreatureKind::Aquabud),
+            "Rockfang" => Some(CreatureKind::Rockfang),
+            "Flarehog" => Some(CreatureKind::Flarehog),
+            _ => None,
+        }
+    }
     pub fn element(self) -> Element {
         match self {
             CreatureKind::Grasshog => Element::Grass,

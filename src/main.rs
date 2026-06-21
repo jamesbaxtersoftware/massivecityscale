@@ -9,6 +9,7 @@ mod origin;
 mod palette;
 mod pause;
 mod pixelate;
+mod save;
 mod ship;
 mod spacefx;
 mod streaming;
@@ -40,6 +41,7 @@ fn main() {
         .add_plugins(creatures::CreaturesPlugin)
         .add_plugins(battle::BattlePlugin)
         .add_plugins(pixelate::PixelatePlugin)
+        .add_plugins(save::SavePlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         .add_systems(Startup, setup);
