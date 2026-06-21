@@ -54,14 +54,89 @@ pub struct Creature {
 #[derive(Resource, Default)]
 pub struct Engaged(pub Option<Entity>);
 
+/// On-foot consumables (reference starting counts).
+#[derive(Resource)]
+pub struct Inventory {
+    pub capture_disc: u32,
+    pub bait: u32,
+    pub heal_spray: u32,
+    pub revive: u32,
+    pub flash_bomb: u32,
+}
+impl Default for Inventory {
+    fn default() -> Self {
+        Self { capture_disc: 23, bait: 12, heal_spray: 8, revive: 3, flash_bomb: 6 }
+    }
+}
+
+/// How many creatures captured (the collection).
+#[derive(Resource, Default)]
+pub struct Collection {
+    pub caught: u32,
+}
+
+/// Crystals reward per successful capture.
+pub const CAPTURE_REWARD: u32 = 40;
+
+/// Capture probability 0..1: easier the more weakened and the lower the level.
+pub fn capture_chance(hp: f32, max_hp: f32, level: u32) -> f32 {
+    let weakened = (1.0 - hp / max_hp.max(1.0)).clamp(0.0, 1.0);
+    let level_factor = (1.0 - level as f32 / 40.0).clamp(0.25, 1.0);
+    ((0.08 + 0.72 * weakened) * level_factor).clamp(0.0, 1.0)
+}
+
 pub struct CreaturesPlugin;
 
 impl Plugin for CreaturesPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Engaged>()
+            .init_resource::<Inventory>()
+            .init_resource::<Collection>()
             .add_systems(OnEnter(Mode::OnFoot), spawn_creatures)
             .add_systems(OnExit(Mode::OnFoot), despawn_creatures)
-            .add_systems(Update, (wander, update_engaged).run_if(in_state(Mode::OnFoot)));
+            .add_systems(
+                Update,
+                (wander, update_engaged, weaken_creature, throw_disc)
+                    .run_if(in_state(Mode::OnFoot)),
+            );
+    }
+}
+
+/// Space weakens the engaged creature (lowers HP, raising capture chance).
+fn weaken_creature(
+    keys: Res<ButtonInput<KeyCode>>,
+    engaged: Res<Engaged>,
+    mut creatures: Query<&mut Creature>,
+) {
+    if !keys.just_pressed(KeyCode::Space) {
+        return;
+    }
+    if let Some(mut c) = engaged.0.and_then(|e| creatures.get_mut(e).ok()) {
+        c.hp = (c.hp - 10.0).max(0.0);
+    }
+}
+
+/// E throws a Capture Disc at the engaged creature; success captures it.
+fn throw_disc(
+    keys: Res<ButtonInput<KeyCode>>,
+    engaged: Res<Engaged>,
+    mut inv: ResMut<Inventory>,
+    mut collection: ResMut<Collection>,
+    mut wallet: ResMut<crate::hud::Wallet>,
+    creatures: Query<&Creature>,
+    mut commands: Commands,
+) {
+    if !keys.just_pressed(KeyCode::KeyE) || inv.capture_disc == 0 {
+        return;
+    }
+    let Some(e) = engaged.0 else { return };
+    let Ok(c) = creatures.get(e) else { return };
+    inv.capture_disc -= 1;
+    let chance = capture_chance(c.hp, c.max_hp, c.level);
+    if rand::random::<f32>() < chance {
+        commands.entity(e).despawn();
+        collection.caught += 1;
+        wallet.crystals += CAPTURE_REWARD;
     }
 }
 
@@ -172,5 +247,74 @@ mod tests {
             }
         }
         assert_eq!(best.map(|(_, id)| id), Some(2));
+    }
+
+    #[test]
+    fn capture_chance_rises_as_weakened_and_is_bounded() {
+        let full = capture_chance(40.0, 40.0, 5);
+        let weak = capture_chance(2.0, 40.0, 5);
+        assert!(weak > full, "weaker creature is easier to catch");
+        for hp in [40.0, 20.0, 0.0] {
+            let c = capture_chance(hp, 40.0, 5);
+            assert!((0.0..=1.0).contains(&c), "chance stays in 0..1");
+        }
+    }
+
+    #[test]
+    fn capture_chance_drops_with_level() {
+        let low = capture_chance(10.0, 40.0, 3);
+        let high = capture_chance(10.0, 40.0, 35);
+        assert!(low > high, "higher-level creatures are harder to catch");
+    }
+
+    #[test]
+    fn space_weakens_engaged_creature() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        let e = app
+            .world_mut()
+            .spawn(Creature {
+                kind: CreatureKind::Grasshog,
+                level: 5,
+                hp: 40.0,
+                max_hp: 40.0,
+                wander_target: Vec3::ZERO,
+                wander_timer: 0.0,
+            })
+            .id();
+        app.insert_resource(Engaged(Some(e)));
+        let mut input = ButtonInput::<KeyCode>::default();
+        input.press(KeyCode::Space);
+        app.insert_resource(input);
+        app.world_mut().run_system_once(weaken_creature).unwrap();
+        assert!(app.world().get::<Creature>(e).unwrap().hp < 40.0);
+    }
+
+    #[test]
+    fn throw_disc_consumes_a_disc() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        let e = app
+            .world_mut()
+            .spawn(Creature {
+                kind: CreatureKind::Grasshog,
+                level: 5,
+                hp: 1.0,
+                max_hp: 40.0,
+                wander_target: Vec3::ZERO,
+                wander_timer: 0.0,
+            })
+            .id();
+        app.insert_resource(Engaged(Some(e)));
+        app.insert_resource(Inventory::default());
+        app.insert_resource(Collection::default());
+        app.insert_resource(crate::hud::Wallet::default());
+        let mut input = ButtonInput::<KeyCode>::default();
+        input.press(KeyCode::KeyE);
+        app.insert_resource(input);
+        app.world_mut().run_system_once(throw_disc).unwrap();
+        assert_eq!(app.world().resource::<Inventory>().capture_disc, 22);
     }
 }

@@ -52,6 +52,15 @@ struct NearestText;
 struct ObjectiveText;
 #[derive(Component)]
 struct LandPromptText;
+/// Root tags for swapping HUDs by mode.
+#[derive(Component)]
+struct SpaceHud;
+#[derive(Component)]
+struct OnFootHud;
+#[derive(Component)]
+struct ItemBarText;
+#[derive(Component)]
+struct EngagedText;
 
 pub struct HudPlugin;
 
@@ -60,8 +69,8 @@ impl Plugin for HudPlugin {
         app.init_resource::<ShipStatus>()
             .init_resource::<Wallet>()
             .init_resource::<Objective>()
-            .add_systems(Startup, setup_hud)
-            .add_systems(Update, update_hud);
+            .add_systems(Startup, (setup_hud, setup_onfoot_hud))
+            .add_systems(Update, (update_hud, hud_mode_visibility, update_onfoot_hud));
     }
 }
 
@@ -123,7 +132,7 @@ fn corner(top: Option<f32>, left: Option<f32>, right: Option<f32>, bottom: Optio
 fn setup_hud(mut commands: Commands) {
     // Bottom-left: condition bars.
     commands
-        .spawn(corner(None, Some(16.0), None, Some(16.0)))
+        .spawn((corner(None, Some(16.0), None, Some(16.0)), SpaceHud))
         .with_children(|c| {
             spawn_bar(c, "SHIELD", Color::srgb(0.25, 0.7, 1.0), ShieldBar);
             spawn_bar(c, "HULL", Color::srgb(0.3, 0.9, 0.5), HullBar);
@@ -132,7 +141,7 @@ fn setup_hud(mut commands: Commands) {
 
     // Bottom-right: speed.
     commands
-        .spawn(corner(None, None, Some(16.0), Some(16.0)))
+        .spawn((corner(None, None, Some(16.0), Some(16.0)), SpaceHud))
         .with_children(|c| {
             c.spawn((
                 SpeedText,
@@ -144,7 +153,7 @@ fn setup_hud(mut commands: Commands) {
 
     // Top-left: objective.
     commands
-        .spawn(corner(Some(16.0), Some(16.0), None, None))
+        .spawn((corner(Some(16.0), Some(16.0), None, None), SpaceHud))
         .with_children(|c| {
             c.spawn((
                 Text::new("OBJECTIVE"),
@@ -161,11 +170,14 @@ fn setup_hud(mut commands: Commands) {
 
     // Top-right: crystals + nearest world.
     commands
-        .spawn({
-            let mut n = corner(Some(16.0), None, Some(16.0), None);
-            n.align_items = AlignItems::End;
-            n
-        })
+        .spawn((
+            {
+                let mut n = corner(Some(16.0), None, Some(16.0), None);
+                n.align_items = AlignItems::End;
+                n
+            },
+            SpaceHud,
+        ))
         .with_children(|c| {
             c.spawn((
                 CrystalsText,
@@ -183,13 +195,16 @@ fn setup_hud(mut commands: Commands) {
 
     // Centered land prompt (shown only when in range, in flight).
     commands
-        .spawn(Node {
-            position_type: PositionType::Absolute,
-            width: Val::Percent(100.0),
-            top: Val::Percent(58.0),
-            justify_content: JustifyContent::Center,
-            ..default()
-        })
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                top: Val::Percent(58.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            SpaceHud,
+        ))
         .with_children(|c| {
             c.spawn((
                 LandPromptText,
@@ -198,6 +213,96 @@ fn setup_hud(mut commands: Commands) {
                 TextColor(Color::srgb(1.0, 0.9, 0.3)),
             ));
         });
+}
+
+/// On-foot HUD: engaged-creature panel (centre) + item bar (bottom).
+fn setup_onfoot_hud(mut commands: Commands) {
+    // Engaged creature info, centred above the item bar.
+    commands
+        .spawn((
+            OnFootHud,
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                top: Val::Percent(20.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+        ))
+        .with_children(|c| {
+            c.spawn((
+                EngagedText,
+                Text::new(""),
+                TextFont { font_size: 22.0, ..default() },
+                TextColor(Color::srgb(0.95, 0.95, 1.0)),
+            ));
+        });
+
+    // Item bar, bottom-centre.
+    commands
+        .spawn((
+            OnFootHud,
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                bottom: Val::Px(18.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+        ))
+        .with_children(|c| {
+            c.spawn((
+                ItemBarText,
+                Text::new(""),
+                TextFont { font_size: 18.0, ..default() },
+                TextColor(label_color()),
+            ));
+        });
+}
+
+/// Swap which HUD shows based on mode.
+fn hud_mode_visibility(
+    mode: Res<State<crate::onfoot::Mode>>,
+    mut space: Query<&mut Visibility, (With<SpaceHud>, Without<OnFootHud>)>,
+    mut foot: Query<&mut Visibility, (With<OnFootHud>, Without<SpaceHud>)>,
+) {
+    let flight = *mode.get() == crate::onfoot::Mode::Flight;
+    for mut v in &mut space {
+        *v = if flight { Visibility::Inherited } else { Visibility::Hidden };
+    }
+    for mut v in &mut foot {
+        *v = if flight { Visibility::Hidden } else { Visibility::Inherited };
+    }
+}
+
+/// Fill the on-foot HUD: engaged creature (kind/Lv/HP/catch%) + item counts.
+fn update_onfoot_hud(
+    inv: Res<crate::creatures::Inventory>,
+    engaged: Res<crate::creatures::Engaged>,
+    creatures: Query<&crate::creatures::Creature>,
+    mut texts: ParamSet<(
+        Query<&mut Text, With<EngagedText>>,
+        Query<&mut Text, With<ItemBarText>>,
+    )>,
+) {
+    if let Ok(mut t) = texts.p0().get_single_mut() {
+        t.0 = match engaged.0.and_then(|e| creatures.get(e).ok()) {
+            Some(c) => {
+                let pct = crate::creatures::capture_chance(c.hp, c.max_hp, c.level) * 100.0;
+                format!(
+                    "{:?}  Lv{}   HP {:.0}/{:.0}   CATCH {pct:.0}%\n[SPACE] weaken   [E] throw disc   [F] take off",
+                    c.kind, c.level, c.hp, c.max_hp
+                )
+            }
+            None => "Approach a creature to engage   \u{2022}   [F] take off".into(),
+        };
+    }
+    if let Ok(mut t) = texts.p1().get_single_mut() {
+        t.0 = format!(
+            "DISC {}    BAIT {}    HEAL {}    REVIVE {}    FLASH {}",
+            inv.capture_disc, inv.bait, inv.heal_spray, inv.revive, inv.flash_bomb
+        );
+    }
 }
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
