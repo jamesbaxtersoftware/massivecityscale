@@ -9,6 +9,7 @@ mod ship;
 mod spacefx;
 mod streaming;
 mod terrain;
+mod warp;
 
 fn main() {
     let mut app = App::new();
@@ -27,6 +28,7 @@ fn main() {
         .add_plugins(terrain::TerrainPlugin)
         .add_plugins(pause::PauseMenuPlugin)
         .add_plugins(spacefx::SpaceFxPlugin)
+        .add_plugins(warp::WarpPlugin)
         .add_plugins(pixelate::PixelatePlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
@@ -73,18 +75,29 @@ fn setup(mut commands: Commands) {
 fn dev_screenshot(
     mut frame: Local<u32>,
     mut commands: Commands,
-    mut ship: Query<&mut origin::WorldPos, With<ship::PlayerShip>>,
+    mut ship: Query<(&mut origin::WorldPos, &mut ship::ShipControl, &mut Transform), With<ship::PlayerShip>>,
+    warp_targets: Res<galaxy::WarpTargets>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut exit: EventWriter<AppExit>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
     if *frame == 0 {
         let g = galaxy::gen::generate(galaxy::WORLD_SEED);
-        // GR_NEAR=<index>: place the ship just above that planet's surface (for a
-        // descent shot). Otherwise leave it at the spawn for a start shot.
+        // GR_NEAR=<index>: place the ship just above that planet's surface.
         if let Ok(idx) = std::env::var("GR_NEAR").and_then(|s| s.parse::<usize>().map_err(|_| std::env::VarError::NotPresent)) {
-            if let (Some(p), Ok(mut wp)) = (g.planets.get(idx), ship.get_single_mut()) {
+            if let (Some(p), Ok((mut wp, _, _))) = (g.planets.get(idx), ship.get_single_mut()) {
                 wp.0 = p.pos + bevy::math::DVec3::new(0.0, 0.0, p.radius + 60_000.0);
+            }
+        }
+        // GR_WARP: jump to the first far system (verifies warp arrival).
+        if std::env::var("GR_WARP").is_ok() {
+            if let (Some(&t), Ok((mut wp, mut ctl, mut tf))) =
+                (warp_targets.positions.first(), ship.get_single_mut())
+            {
+                wp.0 = warp::warp_arrival(t);
+                ctl.yaw = 0.0;
+                ctl.pitch = 0.0;
+                tf.rotation = ship::physics::ship_rotation(0.0, 0.0);
             }
         }
         for (i, p) in g.planets.iter().enumerate() {
