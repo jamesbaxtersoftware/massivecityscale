@@ -20,7 +20,35 @@ pub enum CreatureKind {
     Flarehog,
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Element {
+    Grass,
+    Water,
+    Rock,
+    Fire,
+}
+
+/// Damage multiplier when `atk` hits `def` (classic triangle + rock).
+pub fn effectiveness(atk: Element, def: Element) -> f32 {
+    use Element::*;
+    match (atk, def) {
+        (Fire, Grass) | (Water, Fire) | (Water, Rock) | (Grass, Water) | (Grass, Rock)
+        | (Rock, Fire) => 2.0,
+        (Grass, Fire) | (Fire, Water) | (Fire, Rock) | (Water, Grass) | (Rock, Water)
+        | (Rock, Grass) => 0.5,
+        _ => 1.0,
+    }
+}
+
 impl CreatureKind {
+    pub fn element(self) -> Element {
+        match self {
+            CreatureKind::Grasshog => Element::Grass,
+            CreatureKind::Aquabud => Element::Water,
+            CreatureKind::Rockfang => Element::Rock,
+            CreatureKind::Flarehog => Element::Fire,
+        }
+    }
     pub fn color(self) -> Color {
         match self {
             CreatureKind::Grasshog => Color::srgb(0.4, 0.7, 0.3),
@@ -271,6 +299,14 @@ mod tests {
         let low = capture_chance(10.0, 40.0, 3);
         let high = capture_chance(10.0, 40.0, 35);
         assert!(low > high, "higher-level creatures are harder to catch");
+    }
+
+    #[test]
+    fn type_effectiveness_triangle() {
+        assert_eq!(effectiveness(Element::Fire, Element::Grass), 2.0);
+        assert_eq!(effectiveness(Element::Grass, Element::Fire), 0.5);
+        assert_eq!(effectiveness(Element::Fire, Element::Fire), 1.0);
+        assert_eq!(effectiveness(Element::Water, Element::Fire), 2.0);
     }
 
     #[test]

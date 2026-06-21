@@ -112,6 +112,7 @@ fn dev_screenshot(
                 level: 12,
                 hp: 30.0,
                 max_hp: 52.0,
+                bait_bonus: 0.0,
             };
         }
         let g = galaxy::gen::generate(galaxy::WORLD_SEED);

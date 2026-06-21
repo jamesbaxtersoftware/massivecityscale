@@ -4,8 +4,8 @@
 
 use bevy::prelude::*;
 use crate::creatures::{
-    capture_chance, gain_exp, CaughtCreature, Collection, Creature, CreatureKind, Engaged,
-    Inventory, PlayerStats, CAPTURE_REWARD,
+    capture_chance, effectiveness, gain_exp, CaughtCreature, Collection, Creature, CreatureKind,
+    Engaged, Inventory, PlayerStats, CAPTURE_REWARD,
 };
 use crate::hud::Wallet;
 use crate::onfoot::Mode;
@@ -25,6 +25,8 @@ pub struct Battle {
     pub level: u32,
     pub hp: f32,
     pub max_hp: f32,
+    /// Extra capture chance from Bait, this battle.
+    pub bait_bonus: f32,
 }
 
 pub struct BattlePlugin;
@@ -74,6 +76,7 @@ fn start_battle(
         level: c.level,
         hp: c.hp,
         max_hp: c.max_hp,
+        bait_bonus: 0.0,
     };
     next.set(Phase::Battle);
 }
@@ -98,10 +101,40 @@ fn battle_input(
     let mut acted = false;
 
     if keys.just_pressed(KeyCode::Digit1) {
-        // Attack.
-        let dmg = player_attack_damage(stats.level);
+        // Attack — the lead party creature's element decides effectiveness.
+        let eff = collection
+            .party
+            .first()
+            .map(|lead| effectiveness(lead.kind.element(), kind.element()))
+            .unwrap_or(1.0);
+        let dmg = player_attack_damage(stats.level) * eff;
         battle.hp = (battle.hp - dmg).max(0.0);
-        log.0 = format!("You strike for {dmg:.0}!");
+        let tag = match eff {
+            e if e > 1.0 => "  It's super effective!",
+            e if e < 1.0 => "  It's not very effective...",
+            _ => "",
+        };
+        log.0 = format!("You strike for {dmg:.0}!{tag}");
+        acted = true;
+    } else if keys.just_pressed(KeyCode::Digit3) {
+        // Heal Spray.
+        if inv.heal_spray == 0 {
+            log.0 = "No Heal Spray left!".into();
+            return;
+        }
+        inv.heal_spray -= 1;
+        stats.hp = (stats.hp + 25.0).min(stats.max_hp);
+        log.0 = "You spray on a heal (+25 HP).".into();
+        acted = true;
+    } else if keys.just_pressed(KeyCode::Digit4) {
+        // Bait — raises capture chance for the rest of the battle.
+        if inv.bait == 0 {
+            log.0 = "No Bait left!".into();
+            return;
+        }
+        inv.bait -= 1;
+        battle.bait_bonus = (battle.bait_bonus + 0.15).min(0.45);
+        log.0 = format!("You toss Bait — the {kind:?} is intrigued.");
         acted = true;
     } else if keys.just_pressed(KeyCode::Digit2) {
         // Throw Capture Disc.
@@ -110,7 +143,8 @@ fn battle_input(
             return;
         }
         inv.capture_disc -= 1;
-        let chance = capture_chance(battle.hp, battle.max_hp, battle.level);
+        let chance =
+            (capture_chance(battle.hp, battle.max_hp, battle.level) + battle.bait_bonus).clamp(0.0, 1.0);
         if rand::random::<f32>() < chance {
             if let Some(e) = battle.enemy {
                 commands.entity(e).despawn();
@@ -124,7 +158,7 @@ fn battle_input(
         }
         log.0 = format!("Aw, the {kind:?} broke free!");
         acted = true;
-    } else if keys.just_pressed(KeyCode::Digit3) {
+    } else if keys.just_pressed(KeyCode::Digit5) {
         log.0 = "You got away safely.".into();
         next.set(Phase::Roam);
         return;
@@ -212,7 +246,7 @@ fn spawn_battle_ui(mut commands: Commands) {
                 ));
                 b.spawn((
                     MenuLine,
-                    Text::new("[1] Attack     [2] Capture Disc     [3] Flee"),
+                    Text::new(""),
                     TextFont { font_size: 22.0, ..default() },
                     TextColor(Color::srgb(1.0, 0.9, 0.3)),
                 ));
@@ -254,8 +288,8 @@ fn update_battle_ui(
     }
     if let Ok(mut t) = q.p3().get_single_mut() {
         t.0 = format!(
-            "[1] Attack     [2] Capture Disc ({})     [3] Flee",
-            inv.capture_disc
+            "[1] Attack    [2] Capture Disc ({})    [3] Heal ({})    [4] Bait ({})    [5] Flee",
+            inv.capture_disc, inv.heal_spray, inv.bait
         );
     }
 }
