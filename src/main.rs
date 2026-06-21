@@ -92,6 +92,7 @@ fn dev_screenshot(
     mut autopilot: ResMut<targeting::Autopilot>,
     mut next_phase: ResMut<NextState<battle::Phase>>,
     mut battle_res: ResMut<battle::Battle>,
+    mut landed_biome: ResMut<onfoot::LandedBiome>,
     creatures_q: Query<(Entity, &creatures::Creature)>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut exit: EventWriter<AppExit>,
@@ -114,6 +115,15 @@ fn dev_screenshot(
     if *frame == 0 {
         if std::env::var("GR_FOOT").is_ok() || std::env::var("GR_BATTLE").is_ok() {
             next_mode.set(onfoot::Mode::OnFoot);
+        }
+        if let Ok(bi) = std::env::var("GR_BIOME") {
+            landed_biome.0 = match bi.as_str() {
+                "desert" => onfoot::Biome::Desert,
+                "tundra" => onfoot::Biome::Tundra,
+                "volcanic" => onfoot::Biome::Volcanic,
+                "alien" => onfoot::Biome::Alien,
+                _ => onfoot::Biome::Grass,
+            };
         }
         if std::env::var("GR_BATTLE").is_ok() {
             next_phase.set(battle::Phase::Battle);

@@ -97,6 +97,64 @@ pub enum Mode {
     OnFoot,
 }
 
+/// Surface biome (chosen from the planet you land on) — drives sky/ground colour.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Biome {
+    Grass,
+    Desert,
+    Tundra,
+    Volcanic,
+    Alien,
+}
+
+impl Biome {
+    fn from_pos(pos: bevy::math::DVec3) -> Self {
+        let h = (pos.x.abs() as u64).wrapping_mul(7) ^ (pos.z.abs() as u64).wrapping_mul(13);
+        match h % 5 {
+            0 => Biome::Grass,
+            1 => Biome::Desert,
+            2 => Biome::Tundra,
+            3 => Biome::Volcanic,
+            _ => Biome::Alien,
+        }
+    }
+    fn sky(self) -> Color {
+        match self {
+            Biome::Grass => Color::srgb(0.45, 0.65, 0.9),
+            Biome::Desert => Color::srgb(0.85, 0.72, 0.5),
+            Biome::Tundra => Color::srgb(0.7, 0.8, 0.9),
+            Biome::Volcanic => Color::srgb(0.3, 0.16, 0.14),
+            Biome::Alien => Color::srgb(0.5, 0.3, 0.6),
+        }
+    }
+    fn ground(self) -> Color {
+        match self {
+            Biome::Grass => Color::srgb(0.34, 0.56, 0.28),
+            Biome::Desert => Color::srgb(0.78, 0.66, 0.42),
+            Biome::Tundra => Color::srgb(0.82, 0.86, 0.9),
+            Biome::Volcanic => Color::srgb(0.26, 0.2, 0.18),
+            Biome::Alien => Color::srgb(0.42, 0.3, 0.5),
+        }
+    }
+    fn foliage(self) -> Color {
+        match self {
+            Biome::Grass => Color::srgb(0.18, 0.4, 0.18),
+            Biome::Desert => Color::srgb(0.4, 0.5, 0.25),
+            Biome::Tundra => Color::srgb(0.55, 0.7, 0.6),
+            Biome::Volcanic => Color::srgb(0.3, 0.24, 0.2),
+            Biome::Alien => Color::srgb(0.5, 0.35, 0.6),
+        }
+    }
+}
+
+#[derive(Resource)]
+pub struct LandedBiome(pub Biome);
+impl Default for LandedBiome {
+    fn default() -> Self {
+        Self(Biome::Grass)
+    }
+}
+
 #[derive(Component)]
 pub struct Avatar;
 /// Tags everything spawned for the surface scene, for teardown on take-off.
@@ -109,6 +167,7 @@ impl Plugin for OnFootPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<Mode>()
             .init_resource::<FootCam>()
+            .init_resource::<LandedBiome>()
             // Flight systems run only in flight (so WASD doesn't also fly the ship).
             .configure_sets(
                 Update,
@@ -145,6 +204,7 @@ impl Plugin for OnFootPlugin {
 fn land_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut next: ResMut<NextState<Mode>>,
+    mut landed: ResMut<LandedBiome>,
     ship: Query<&WorldPos, With<PlayerShip>>,
     planets: Query<(&WorldPos, &PlanetBody)>,
 ) {
@@ -152,10 +212,15 @@ fn land_input(
         return;
     }
     let Ok(s) = ship.get_single() else { return };
-    let near = planets
-        .iter()
-        .any(|(p, b)| (p.0 - s.0).length() - b.radius as f64 <= LAND_RANGE);
-    if near {
+    let mut best: Option<(f64, bevy::math::DVec3)> = None;
+    for (p, b) in &planets {
+        let d = (p.0 - s.0).length() - b.radius as f64;
+        if d <= LAND_RANGE && best.map_or(true, |(bd, _)| d < bd) {
+            best = Some((d, p.0));
+        }
+    }
+    if let Some((_, pos)) = best {
+        landed.0 = Biome::from_pos(pos);
         next.set(Mode::OnFoot);
     }
 }
@@ -172,9 +237,11 @@ fn enter_onfoot(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut clear: ResMut<ClearColor>,
+    biome: Res<LandedBiome>,
     cam: Query<Entity, With<Camera3d>>,
 ) {
-    clear.0 = Color::srgb(0.45, 0.65, 0.9); // daytime sky
+    let b = biome.0;
+    clear.0 = b.sky();
     let layer = RenderLayers::layer(SURFACE_LAYER);
 
     // Point the (shared) 3D camera at the surface layer.
@@ -188,7 +255,7 @@ fn enter_onfoot(
         layer.clone(),
         Mesh3d(meshes.add(build_terrain_mesh(GROUND_HALF + 40.0, 120))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.34, 0.56, 0.28),
+            base_color: b.ground(),
             perceptual_roughness: 0.95,
             cull_mode: None,
             ..default()
@@ -261,11 +328,11 @@ fn enter_onfoot(
         ..default()
     });
     let bush_mat = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.22, 0.45, 0.2),
+        base_color: b.foliage(),
         ..default()
     });
     let leaf_mat = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.18, 0.4, 0.18),
+        base_color: b.foliage(),
         ..default()
     });
     let trunk_mat = materials.add(StandardMaterial {
