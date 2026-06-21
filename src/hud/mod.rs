@@ -353,7 +353,7 @@ fn update_onfoot_hud(
     if let Ok(mut t) = texts.p2().get_single_mut() {
         let next = crate::creatures::exp_to_next(stats.level);
         t.0 = format!(
-            "Lv.{}   HP {:.0}/{:.0}   SP {:.0}/{:.0}   EXP {}/{}",
+            "Lv.{}   HP {:.0}/{:.0}   SP {:.0}/{:.0}   EXP {}/{}   [C] party",
             stats.level, stats.hp, stats.max_hp, stats.sp, stats.max_sp, stats.exp, next
         );
     }

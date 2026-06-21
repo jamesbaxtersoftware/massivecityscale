@@ -7,6 +7,7 @@ mod hud;
 mod onfoot;
 mod origin;
 mod palette;
+mod party;
 mod pause;
 mod pixelate;
 mod save;
@@ -42,6 +43,7 @@ fn main() {
         .add_plugins(battle::BattlePlugin)
         .add_plugins(pixelate::PixelatePlugin)
         .add_plugins(save::SavePlugin)
+        .add_plugins(party::PartyViewPlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         // Faint blue fill so planets' shadowed sides read as lit spheres rather
@@ -185,10 +187,19 @@ fn dev_screenshot(
     mut next_phase: ResMut<NextState<battle::Phase>>,
     mut battle_res: ResMut<battle::Battle>,
     mut landed_biome: ResMut<onfoot::LandedBiome>,
+    mut collection: ResMut<creatures::Collection>,
+    mut party_view: ResMut<party::PartyView>,
     creatures_q: Query<(Entity, &creatures::Creature)>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut exit: EventWriter<AppExit>,
 ) {
+    // GR_PARTY: seed a couple of catches and open the party viewer.
+    if *frame == 6 && std::env::var("GR_PARTY").is_ok() {
+        use creatures::{CaughtCreature, CreatureKind};
+        collection.party.push(CaughtCreature { kind: CreatureKind::Aquabud, level: 7 });
+        collection.party.push(CaughtCreature { kind: CreatureKind::Flarehog, level: 11 });
+        party_view.open = true;
+    }
     // GR_BATTLE: once creatures exist, point the battle at a real one (for the camera).
     if *frame == 6 && std::env::var("GR_BATTLE").is_ok() {
         if let Some((e, c)) = creatures_q.iter().next() {
@@ -208,7 +219,10 @@ fn dev_screenshot(
         autopilot.on = true;
     }
     if *frame == 0 {
-        if std::env::var("GR_FOOT").is_ok() || std::env::var("GR_BATTLE").is_ok() {
+        if std::env::var("GR_FOOT").is_ok()
+            || std::env::var("GR_BATTLE").is_ok()
+            || std::env::var("GR_PARTY").is_ok()
+        {
             next_mode.set(onfoot::Mode::OnFoot);
         }
         if let Ok(bi) = std::env::var("GR_BIOME") {
