@@ -136,52 +136,13 @@ impl Plugin for CreaturesPlugin {
             .init_resource::<PlayerStats>()
             .add_systems(OnEnter(Mode::OnFoot), spawn_creatures)
             .add_systems(OnExit(Mode::OnFoot), despawn_creatures)
+            // Roaming pauses during a battle.
             .add_systems(
                 Update,
-                (wander, update_engaged, weaken_creature, throw_disc)
-                    .run_if(in_state(Mode::OnFoot)),
+                (wander, update_engaged)
+                    .run_if(in_state(Mode::OnFoot))
+                    .run_if(in_state(crate::battle::Phase::Roam)),
             );
-    }
-}
-
-/// Space weakens the engaged creature (lowers HP, raising capture chance).
-fn weaken_creature(
-    keys: Res<ButtonInput<KeyCode>>,
-    engaged: Res<Engaged>,
-    mut creatures: Query<&mut Creature>,
-) {
-    if !keys.just_pressed(KeyCode::Space) {
-        return;
-    }
-    if let Some(mut c) = engaged.0.and_then(|e| creatures.get_mut(e).ok()) {
-        c.hp = (c.hp - 10.0).max(0.0);
-    }
-}
-
-/// E throws a Capture Disc at the engaged creature; success captures it.
-#[allow(clippy::too_many_arguments)]
-fn throw_disc(
-    keys: Res<ButtonInput<KeyCode>>,
-    engaged: Res<Engaged>,
-    mut inv: ResMut<Inventory>,
-    mut collection: ResMut<Collection>,
-    mut stats: ResMut<PlayerStats>,
-    mut wallet: ResMut<crate::hud::Wallet>,
-    creatures: Query<&Creature>,
-    mut commands: Commands,
-) {
-    if !keys.just_pressed(KeyCode::KeyE) || inv.capture_disc == 0 {
-        return;
-    }
-    let Some(e) = engaged.0 else { return };
-    let Ok(c) = creatures.get(e) else { return };
-    inv.capture_disc -= 1;
-    let chance = capture_chance(c.hp, c.max_hp, c.level);
-    if rand::random::<f32>() < chance {
-        collection.party.push(CaughtCreature { kind: c.kind, level: c.level });
-        gain_exp(&mut stats, c.level * 20);
-        wallet.crystals += CAPTURE_REWARD;
-        commands.entity(e).despawn();
     }
 }
 
@@ -310,58 +271,6 @@ mod tests {
         let low = capture_chance(10.0, 40.0, 3);
         let high = capture_chance(10.0, 40.0, 35);
         assert!(low > high, "higher-level creatures are harder to catch");
-    }
-
-    #[test]
-    fn space_weakens_engaged_creature() {
-        use bevy::ecs::system::RunSystemOnce;
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        let e = app
-            .world_mut()
-            .spawn(Creature {
-                kind: CreatureKind::Grasshog,
-                level: 5,
-                hp: 40.0,
-                max_hp: 40.0,
-                wander_target: Vec3::ZERO,
-                wander_timer: 0.0,
-            })
-            .id();
-        app.insert_resource(Engaged(Some(e)));
-        let mut input = ButtonInput::<KeyCode>::default();
-        input.press(KeyCode::Space);
-        app.insert_resource(input);
-        app.world_mut().run_system_once(weaken_creature).unwrap();
-        assert!(app.world().get::<Creature>(e).unwrap().hp < 40.0);
-    }
-
-    #[test]
-    fn throw_disc_consumes_a_disc() {
-        use bevy::ecs::system::RunSystemOnce;
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        let e = app
-            .world_mut()
-            .spawn(Creature {
-                kind: CreatureKind::Grasshog,
-                level: 5,
-                hp: 1.0,
-                max_hp: 40.0,
-                wander_target: Vec3::ZERO,
-                wander_timer: 0.0,
-            })
-            .id();
-        app.insert_resource(Engaged(Some(e)));
-        app.insert_resource(Inventory::default());
-        app.insert_resource(Collection::default());
-        app.insert_resource(PlayerStats::default());
-        app.insert_resource(crate::hud::Wallet::default());
-        let mut input = ButtonInput::<KeyCode>::default();
-        input.press(KeyCode::KeyE);
-        app.insert_resource(input);
-        app.world_mut().run_system_once(throw_disc).unwrap();
-        assert_eq!(app.world().resource::<Inventory>().capture_disc, 22);
     }
 
     #[test]

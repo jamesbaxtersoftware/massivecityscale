@@ -48,9 +48,13 @@ impl Plugin for OnFootPlugin {
                     .run_if(in_state(Mode::Flight)),
             )
             .add_systems(Update, land_input.run_if(in_state(Mode::Flight)))
+            .add_systems(Update, foot_camera.run_if(in_state(Mode::OnFoot)))
+            // Walking and take-off are disabled mid-battle.
             .add_systems(
                 Update,
-                (walk_avatar, foot_camera, takeoff_input).run_if(in_state(Mode::OnFoot)),
+                (walk_avatar, takeoff_input)
+                    .run_if(in_state(Mode::OnFoot))
+                    .run_if(in_state(crate::battle::Phase::Roam)),
             )
             .add_systems(OnEnter(Mode::OnFoot), enter_onfoot)
             .add_systems(OnExit(Mode::OnFoot), exit_onfoot);

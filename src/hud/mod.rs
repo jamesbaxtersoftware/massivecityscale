@@ -302,15 +302,18 @@ fn setup_onfoot_hud(mut commands: Commands) {
 /// Swap which HUD shows based on mode.
 fn hud_mode_visibility(
     mode: Res<State<crate::onfoot::Mode>>,
+    phase: Res<State<crate::battle::Phase>>,
     mut space: Query<&mut Visibility, (With<SpaceHud>, Without<OnFootHud>)>,
     mut foot: Query<&mut Visibility, (With<OnFootHud>, Without<SpaceHud>)>,
 ) {
     let flight = *mode.get() == crate::onfoot::Mode::Flight;
+    // On-foot HUD only while roaming on foot (the battle has its own overlay).
+    let roaming_foot = !flight && *phase.get() == crate::battle::Phase::Roam;
     for mut v in &mut space {
         *v = if flight { Visibility::Inherited } else { Visibility::Hidden };
     }
     for mut v in &mut foot {
-        *v = if flight { Visibility::Hidden } else { Visibility::Inherited };
+        *v = if roaming_foot { Visibility::Inherited } else { Visibility::Hidden };
     }
 }
 
@@ -334,7 +337,7 @@ fn update_onfoot_hud(
             Some(c) => {
                 let pct = crate::creatures::capture_chance(c.hp, c.max_hp, c.level) * 100.0;
                 format!(
-                    "{:?}  Lv{}   HP {:.0}/{:.0}   CATCH {pct:.0}%\n[SPACE] weaken   [E] throw disc   [F] take off",
+                    "{:?}  Lv{}   HP {:.0}/{:.0}   CATCH {pct:.0}%\n[ENTER] battle   [F] take off",
                     c.kind, c.level, c.hp, c.max_hp
                 )
             }

@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+mod battle;
 mod creatures;
 mod galaxy;
 mod hud;
@@ -37,6 +38,7 @@ fn main() {
         .add_plugins(targeting::TargetingPlugin)
         .add_plugins(onfoot::OnFootPlugin)
         .add_plugins(creatures::CreaturesPlugin)
+        .add_plugins(battle::BattlePlugin)
         .add_plugins(pixelate::PixelatePlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
@@ -88,6 +90,8 @@ fn dev_screenshot(
     warp_targets: Res<galaxy::WarpTargets>,
     mut next_mode: ResMut<NextState<onfoot::Mode>>,
     mut autopilot: ResMut<targeting::Autopilot>,
+    mut next_phase: ResMut<NextState<battle::Phase>>,
+    mut battle_res: ResMut<battle::Battle>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut exit: EventWriter<AppExit>,
 ) {
@@ -97,8 +101,18 @@ fn dev_screenshot(
         autopilot.on = true;
     }
     if *frame == 0 {
-        if std::env::var("GR_FOOT").is_ok() {
+        if std::env::var("GR_FOOT").is_ok() || std::env::var("GR_BATTLE").is_ok() {
             next_mode.set(onfoot::Mode::OnFoot);
+        }
+        if std::env::var("GR_BATTLE").is_ok() {
+            next_phase.set(battle::Phase::Battle);
+            *battle_res = battle::Battle {
+                enemy: None,
+                kind: Some(creatures::CreatureKind::Flarehog),
+                level: 12,
+                hp: 30.0,
+                max_hp: 52.0,
+            };
         }
         let g = galaxy::gen::generate(galaxy::WORLD_SEED);
         // GR_NEAR=<index>: place the ship just above that planet's surface.
