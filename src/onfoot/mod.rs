@@ -4,7 +4,10 @@
 
 use bevy::prelude::*;
 use bevy::ecs::schedule::{IntoSystemConfigs, IntoSystemSetConfigs};
+use bevy::input::mouse::MouseMotion;
 use bevy::render::view::RenderLayers;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 use crate::galaxy::PlanetBody;
 use crate::origin::{FrameSet, WorldPos};
 use crate::ship::PlayerShip;
@@ -13,8 +16,21 @@ use crate::ship::PlayerShip;
 pub const SURFACE_LAYER: usize = 1;
 /// Land when the ship is within this surface distance (m) of a planet.
 pub const LAND_RANGE: f64 = 5.0e6;
-const WALK_SPEED: f32 = 22.0;
+const WALK_SPEED: f32 = 14.0;
 const GROUND_HALF: f32 = 1800.0;
+const LOOK_SENS: f32 = 0.005;
+
+/// Orbit angles for the third-person foot camera (mouse-look).
+#[derive(Resource)]
+struct FootCam {
+    yaw: f32,
+    pitch: f32,
+}
+impl Default for FootCam {
+    fn default() -> Self {
+        Self { yaw: 0.0, pitch: 0.35 }
+    }
+}
 
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Mode {
@@ -34,6 +50,7 @@ pub struct OnFootPlugin;
 impl Plugin for OnFootPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<Mode>()
+            .init_resource::<FootCam>()
             // Flight systems run only in flight (so WASD doesn't also fly the ship).
             .configure_sets(
                 Update,
@@ -108,36 +125,140 @@ fn enter_onfoot(
         layer.clone(),
         Mesh3d(meshes.add(Cuboid::new(GROUND_HALF * 2.0, 2.0, GROUND_HALF * 2.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.3, 0.55, 0.25),
+            base_color: Color::srgb(0.34, 0.56, 0.28),
+            perceptual_roughness: 0.95,
             ..default()
         })),
         Transform::from_xyz(0.0, -1.0, 0.0),
     ));
 
-    // Avatar (capsule), facing -Z.
-    commands.spawn((
-        SurfaceEntity,
-        Avatar,
-        layer.clone(),
-        Mesh3d(meshes.add(Capsule3d::new(0.6, 1.4))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.85, 0.3, 0.2),
-            ..default()
-        })),
-        Transform::from_xyz(0.0, 1.3, 0.0),
-    ));
+    // Avatar: a little blocky figure (body + head) so it reads as a character.
+    commands
+        .spawn((
+            SurfaceEntity,
+            Avatar,
+            layer.clone(),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            Visibility::default(),
+        ))
+        .with_children(|a| {
+            a.spawn((
+                layer.clone(),
+                Mesh3d(meshes.add(Cuboid::new(0.9, 1.4, 0.6))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.85, 0.3, 0.2),
+                    ..default()
+                })),
+                Transform::from_xyz(0.0, 1.0, 0.0),
+            ));
+            a.spawn((
+                layer.clone(),
+                Mesh3d(meshes.add(Cuboid::new(0.6, 0.6, 0.6))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.95, 0.8, 0.65),
+                    ..default()
+                })),
+                Transform::from_xyz(0.0, 2.0, 0.0),
+            ));
+        });
 
-    // Surface sun.
+    // Surface sun with shadows so things sit on the ground.
     commands.spawn((
         SurfaceEntity,
-        layer,
+        layer.clone(),
         DirectionalLight {
-            illuminance: 12_000.0,
-            shadows_enabled: false,
+            illuminance: 11_000.0,
+            shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(1.0, 2.0, 0.5).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0.6, 1.5, 0.4).looking_at(Vec3::ZERO, Vec3::Y),
     ));
+
+    // A big moon hanging in the sky (you're on an alien world).
+    commands.spawn((
+        SurfaceEntity,
+        layer.clone(),
+        Mesh3d(meshes.add(Sphere::new(140.0).mesh().ico(4).unwrap())),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.7, 0.72, 0.85),
+            emissive: LinearRgba::rgb(0.25, 0.27, 0.4),
+            unlit: true,
+            ..default()
+        })),
+        Transform::from_xyz(-700.0, 460.0, -1400.0),
+    ));
+
+    // Scatter rocks, trees and bushes near the landing site for terrain feel.
+    let rock_mesh = meshes.add(Sphere::new(1.0).mesh().ico(1).unwrap());
+    let bush_mesh = meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap());
+    let trunk_mesh = meshes.add(Cylinder::new(0.35, 3.0));
+    let rock_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.5, 0.48, 0.45),
+        ..default()
+    });
+    let bush_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.22, 0.45, 0.2),
+        ..default()
+    });
+    let leaf_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.18, 0.4, 0.18),
+        ..default()
+    });
+    let trunk_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.35, 0.25, 0.16),
+        ..default()
+    });
+    let mut rng = ChaCha8Rng::seed_from_u64(0xF005);
+    for _ in 0..70 {
+        let x = rng.gen_range(-150.0..150.0_f32);
+        let z = rng.gen_range(-150.0..150.0_f32);
+        if x * x + z * z < 64.0 {
+            continue; // keep the spawn clearing open
+        }
+        match rng.gen_range(0..3) {
+            0 => {
+                // Rock.
+                let s = rng.gen_range(0.8..2.4);
+                commands.spawn((
+                    SurfaceEntity,
+                    layer.clone(),
+                    Mesh3d(rock_mesh.clone()),
+                    MeshMaterial3d(rock_mat.clone()),
+                    Transform::from_xyz(x, s * 0.5, z).with_scale(Vec3::splat(s)),
+                ));
+            }
+            1 => {
+                // Tree: trunk + leaf ball.
+                commands
+                    .spawn((
+                        SurfaceEntity,
+                        layer.clone(),
+                        Mesh3d(trunk_mesh.clone()),
+                        MeshMaterial3d(trunk_mat.clone()),
+                        Transform::from_xyz(x, 1.5, z),
+                    ))
+                    .with_children(|t| {
+                        t.spawn((
+                            layer.clone(),
+                            Mesh3d(bush_mesh.clone()),
+                            MeshMaterial3d(leaf_mat.clone()),
+                            Transform::from_xyz(0.0, 2.3, 0.0).with_scale(Vec3::splat(2.2)),
+                        ));
+                    });
+            }
+            _ => {
+                // Bush.
+                let s = rng.gen_range(0.7..1.6);
+                commands.spawn((
+                    SurfaceEntity,
+                    layer.clone(),
+                    Mesh3d(bush_mesh.clone()),
+                    MeshMaterial3d(bush_mat.clone()),
+                    Transform::from_xyz(x, s * 0.5, z).with_scale(Vec3::splat(s)),
+                ));
+            }
+        }
+    }
 }
 
 fn exit_onfoot(
@@ -155,48 +276,62 @@ fn exit_onfoot(
     }
 }
 
-/// WASD walks the avatar across the ground (relative to camera-forward = -Z).
+/// Camera-relative WASD walking: W moves where the camera faces, A/D strafe.
 fn walk_avatar(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
+    foot: Res<FootCam>,
     mut avatar: Query<&mut Transform, With<Avatar>>,
 ) {
     let Ok(mut tf) = avatar.get_single_mut() else { return };
+    // Horizontal forward/right from the camera yaw.
+    let fwd = Vec3::new(-foot.yaw.sin(), 0.0, -foot.yaw.cos());
+    let right = Vec3::new(foot.yaw.cos(), 0.0, -foot.yaw.sin());
     let mut dir = Vec3::ZERO;
     if keys.pressed(KeyCode::KeyW) {
-        dir.z -= 1.0;
+        dir += fwd;
     }
     if keys.pressed(KeyCode::KeyS) {
-        dir.z += 1.0;
-    }
-    if keys.pressed(KeyCode::KeyA) {
-        dir.x -= 1.0;
+        dir -= fwd;
     }
     if keys.pressed(KeyCode::KeyD) {
-        dir.x += 1.0;
+        dir += right;
     }
-    if dir != Vec3::ZERO {
-        let step = dir.normalize() * WALK_SPEED * time.delta_secs();
-        tf.translation += step;
+    if keys.pressed(KeyCode::KeyA) {
+        dir -= right;
+    }
+    if dir.length_squared() > 1e-6 {
+        let dir = dir.normalize();
+        tf.translation += dir * WALK_SPEED * time.delta_secs();
         tf.translation.x = tf.translation.x.clamp(-GROUND_HALF, GROUND_HALF);
         tf.translation.z = tf.translation.z.clamp(-GROUND_HALF, GROUND_HALF);
-        // Face travel direction.
-        let flat = Vec3::new(step.x, 0.0, step.z);
-        if flat.length_squared() > 1e-6 {
-            tf.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, flat.normalize());
-        }
+        tf.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, dir);
     }
 }
 
-/// Third-person camera trailing the avatar.
+/// Third-person orbit camera with mouse-look around the avatar.
 fn foot_camera(
+    mut mouse: EventReader<MouseMotion>,
+    mut foot: ResMut<FootCam>,
     avatar: Query<&Transform, (With<Avatar>, Without<Camera3d>)>,
     mut cam: Query<&mut Transform, With<Camera3d>>,
 ) {
+    let mut delta = Vec2::ZERO;
+    for ev in mouse.read() {
+        delta += ev.delta;
+    }
+    foot.yaw -= delta.x * LOOK_SENS;
+    foot.pitch = (foot.pitch + delta.y * LOOK_SENS).clamp(-0.2, 1.2);
+
     let Ok(a) = avatar.get_single() else { return };
     let Ok(mut c) = cam.get_single_mut() else { return };
-    c.translation = a.translation + Vec3::new(0.0, 6.0, 14.0);
-    c.look_at(a.translation + Vec3::new(0.0, 1.0, 0.0), Vec3::Y);
+    let target = a.translation + Vec3::Y * 1.4;
+    let dist = 13.0;
+    // Spherical orbit: behind (+Z at yaw 0) and raised by pitch, looking down.
+    let h = dist * foot.pitch.cos();
+    let offset = Vec3::new(h * foot.yaw.sin(), dist * foot.pitch.sin(), h * foot.yaw.cos());
+    c.translation = target + offset;
+    c.look_at(target, Vec3::Y);
 }
 
 #[cfg(test)]
@@ -212,6 +347,7 @@ mod tests {
         let mut input = ButtonInput::<KeyCode>::default();
         input.press(KeyCode::KeyW);
         app.insert_resource(input);
+        app.insert_resource(FootCam::default()); // yaw 0 -> forward is -Z
         let e = app
             .world_mut()
             .spawn((Avatar, Transform::from_xyz(0.0, 1.3, 0.0)))
