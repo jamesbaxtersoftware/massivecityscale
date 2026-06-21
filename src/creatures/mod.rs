@@ -69,10 +69,51 @@ impl Default for Inventory {
     }
 }
 
-/// How many creatures captured (the collection).
+/// A captured creature in the player's collection/party.
+#[derive(Clone, Copy)]
+pub struct CaughtCreature {
+    pub kind: CreatureKind,
+    pub level: u32,
+}
+
+/// The captured creatures (most recent first = the active party head).
 #[derive(Resource, Default)]
 pub struct Collection {
-    pub caught: u32,
+    pub party: Vec<CaughtCreature>,
+}
+
+/// Player progression.
+#[derive(Resource)]
+pub struct PlayerStats {
+    pub level: u32,
+    pub exp: u32,
+    pub hp: f32,
+    pub max_hp: f32,
+    pub sp: f32,
+    pub max_sp: f32,
+}
+impl Default for PlayerStats {
+    fn default() -> Self {
+        Self { level: 1, exp: 0, hp: 50.0, max_hp: 50.0, sp: 30.0, max_sp: 30.0 }
+    }
+}
+
+/// EXP needed to advance from `level` to the next.
+pub fn exp_to_next(level: u32) -> u32 {
+    50 + level * 50
+}
+
+/// Apply EXP, leveling up (carrying overflow) and growing stats.
+pub fn gain_exp(stats: &mut PlayerStats, amount: u32) {
+    stats.exp += amount;
+    while stats.exp >= exp_to_next(stats.level) {
+        stats.exp -= exp_to_next(stats.level);
+        stats.level += 1;
+        stats.max_hp += 6.0;
+        stats.hp = stats.max_hp;
+        stats.max_sp += 3.0;
+        stats.sp = stats.max_sp;
+    }
 }
 
 /// Crystals reward per successful capture.
@@ -92,6 +133,7 @@ impl Plugin for CreaturesPlugin {
         app.init_resource::<Engaged>()
             .init_resource::<Inventory>()
             .init_resource::<Collection>()
+            .init_resource::<PlayerStats>()
             .add_systems(OnEnter(Mode::OnFoot), spawn_creatures)
             .add_systems(OnExit(Mode::OnFoot), despawn_creatures)
             .add_systems(
@@ -117,11 +159,13 @@ fn weaken_creature(
 }
 
 /// E throws a Capture Disc at the engaged creature; success captures it.
+#[allow(clippy::too_many_arguments)]
 fn throw_disc(
     keys: Res<ButtonInput<KeyCode>>,
     engaged: Res<Engaged>,
     mut inv: ResMut<Inventory>,
     mut collection: ResMut<Collection>,
+    mut stats: ResMut<PlayerStats>,
     mut wallet: ResMut<crate::hud::Wallet>,
     creatures: Query<&Creature>,
     mut commands: Commands,
@@ -134,9 +178,10 @@ fn throw_disc(
     inv.capture_disc -= 1;
     let chance = capture_chance(c.hp, c.max_hp, c.level);
     if rand::random::<f32>() < chance {
-        commands.entity(e).despawn();
-        collection.caught += 1;
+        collection.party.push(CaughtCreature { kind: c.kind, level: c.level });
+        gain_exp(&mut stats, c.level * 20);
         wallet.crystals += CAPTURE_REWARD;
+        commands.entity(e).despawn();
     }
 }
 
@@ -310,11 +355,23 @@ mod tests {
         app.insert_resource(Engaged(Some(e)));
         app.insert_resource(Inventory::default());
         app.insert_resource(Collection::default());
+        app.insert_resource(PlayerStats::default());
         app.insert_resource(crate::hud::Wallet::default());
         let mut input = ButtonInput::<KeyCode>::default();
         input.press(KeyCode::KeyE);
         app.insert_resource(input);
         app.world_mut().run_system_once(throw_disc).unwrap();
         assert_eq!(app.world().resource::<Inventory>().capture_disc, 22);
+    }
+
+    #[test]
+    fn gain_exp_levels_up_and_carries_overflow() {
+        let mut s = PlayerStats::default();
+        let start_hp = s.max_hp;
+        // Enough to cross at least one level boundary with leftover.
+        gain_exp(&mut s, exp_to_next(1) + 10);
+        assert_eq!(s.level, 2, "leveled up");
+        assert_eq!(s.exp, 10, "overflow carried");
+        assert!(s.max_hp > start_hp, "stats grew");
     }
 }

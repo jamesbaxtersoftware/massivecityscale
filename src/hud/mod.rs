@@ -61,6 +61,10 @@ struct OnFootHud;
 struct ItemBarText;
 #[derive(Component)]
 struct EngagedText;
+#[derive(Component)]
+struct PlayerPanelText;
+#[derive(Component)]
+struct PartyText;
 
 pub struct HudPlugin;
 
@@ -258,6 +262,41 @@ fn setup_onfoot_hud(mut commands: Commands) {
                 TextColor(label_color()),
             ));
         });
+
+    // Player panel, bottom-left.
+    commands
+        .spawn((
+            OnFootHud,
+            corner(None, Some(16.0), None, Some(16.0)),
+        ))
+        .with_children(|c| {
+            c.spawn((
+                PlayerPanelText,
+                Text::new(""),
+                TextFont { font_size: 18.0, ..default() },
+                TextColor(Color::srgb(0.92, 0.95, 1.0)),
+            ));
+        });
+
+    // Party panel, top-right.
+    commands
+        .spawn((
+            OnFootHud,
+            corner(Some(16.0), None, Some(16.0), None),
+        ))
+        .with_children(|c| {
+            c.spawn((
+                Text::new("PARTY"),
+                TextFont { font_size: 13.0, ..default() },
+                TextColor(Color::srgb(0.5, 0.6, 0.72)),
+            ));
+            c.spawn((
+                PartyText,
+                Text::new(""),
+                TextFont { font_size: 16.0, ..default() },
+                TextColor(label_color()),
+            ));
+        });
 }
 
 /// Swap which HUD shows based on mode.
@@ -276,13 +315,18 @@ fn hud_mode_visibility(
 }
 
 /// Fill the on-foot HUD: engaged creature (kind/Lv/HP/catch%) + item counts.
+#[allow(clippy::type_complexity)]
 fn update_onfoot_hud(
     inv: Res<crate::creatures::Inventory>,
     engaged: Res<crate::creatures::Engaged>,
+    stats: Res<crate::creatures::PlayerStats>,
+    collection: Res<crate::creatures::Collection>,
     creatures: Query<&crate::creatures::Creature>,
     mut texts: ParamSet<(
         Query<&mut Text, With<EngagedText>>,
         Query<&mut Text, With<ItemBarText>>,
+        Query<&mut Text, With<PlayerPanelText>>,
+        Query<&mut Text, With<PartyText>>,
     )>,
 ) {
     if let Ok(mut t) = texts.p0().get_single_mut() {
@@ -302,6 +346,27 @@ fn update_onfoot_hud(
             "DISC {}    BAIT {}    HEAL {}    REVIVE {}    FLASH {}",
             inv.capture_disc, inv.bait, inv.heal_spray, inv.revive, inv.flash_bomb
         );
+    }
+    if let Ok(mut t) = texts.p2().get_single_mut() {
+        let next = crate::creatures::exp_to_next(stats.level);
+        t.0 = format!(
+            "Lv.{}   HP {:.0}/{:.0}   SP {:.0}/{:.0}   EXP {}/{}",
+            stats.level, stats.hp, stats.max_hp, stats.sp, stats.max_sp, stats.exp, next
+        );
+    }
+    if let Ok(mut t) = texts.p3().get_single_mut() {
+        if collection.party.is_empty() {
+            t.0 = "(empty)".into();
+        } else {
+            t.0 = collection
+                .party
+                .iter()
+                .rev()
+                .take(6)
+                .map(|c| format!("{:?}  Lv{}", c.kind, c.level))
+                .collect::<Vec<_>>()
+                .join("\n");
+        }
     }
 }
 
