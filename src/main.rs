@@ -47,8 +47,9 @@ fn main() {
     // On-screen gamepad tester (GR_PADTEST=1): shows live controller input so an
     // unrecognized pad's buttons/axes can be diagnosed.
     if std::env::var("GR_PADTEST").is_ok() {
-        app.add_systems(Startup, pad_debug_setup)
-            .add_systems(Update, pad_debug_update);
+        app.init_resource::<PadRaw>()
+            .add_systems(Startup, pad_debug_setup)
+            .add_systems(Update, (pad_raw_log, pad_debug_update).chain());
     }
 
     // DEV harness (env-gated, never runs in normal play): captures a framebuffer
@@ -106,8 +107,30 @@ fn pad_debug_setup(mut commands: Commands) {
     ));
 }
 
+#[derive(Resource, Default)]
+struct PadRaw {
+    last_btn: String,
+    last_axis: String,
+}
+
+fn pad_raw_log(
+    mut btn: EventReader<bevy::input::gamepad::RawGamepadButtonChangedEvent>,
+    mut axis: EventReader<bevy::input::gamepad::RawGamepadAxisChangedEvent>,
+    mut raw: ResMut<PadRaw>,
+) {
+    for e in btn.read() {
+        raw.last_btn = format!("{:?} = {:.2}", e.button, e.value);
+    }
+    for e in axis.read() {
+        if e.value.abs() > 0.3 {
+            raw.last_axis = format!("{:?} = {:.2}", e.axis, e.value);
+        }
+    }
+}
+
 fn pad_debug_update(
     gamepads: Query<&Gamepad>,
+    raw: Res<PadRaw>,
     mut text: Query<&mut Text, With<PadDebugText>>,
 ) {
     let Ok(mut t) = text.get_single_mut() else { return };
@@ -136,6 +159,8 @@ fn pad_debug_update(
     } else {
         s += "(no gamepad entity — not detected by the engine)";
     }
+    s += &format!("\nRAW last button: {}", raw.last_btn);
+    s += &format!("\nRAW last axis:   {}", raw.last_axis);
     t.0 = s;
 }
 
