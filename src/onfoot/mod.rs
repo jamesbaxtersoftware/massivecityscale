@@ -24,7 +24,7 @@ pub enum Mode {
 }
 
 #[derive(Component)]
-struct Avatar;
+pub struct Avatar;
 /// Tags everything spawned for the surface scene, for teardown on take-off.
 #[derive(Component)]
 struct SurfaceEntity;

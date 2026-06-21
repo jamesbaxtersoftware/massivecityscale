@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+mod creatures;
 mod galaxy;
 mod hud;
 mod onfoot;
@@ -35,6 +36,7 @@ fn main() {
         .add_plugins(hud::HudPlugin)
         .add_plugins(targeting::TargetingPlugin)
         .add_plugins(onfoot::OnFootPlugin)
+        .add_plugins(creatures::CreaturesPlugin)
         .add_plugins(pixelate::PixelatePlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
