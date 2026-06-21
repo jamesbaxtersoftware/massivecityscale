@@ -41,15 +41,16 @@ pub struct Battle {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Page {
+pub(crate) enum Page {
     Main,
+    Move,
     Item,
 }
 
 /// 2x2 menu state: which page and the cursor (0=TL, 1=TR, 2=BL, 3=BR).
 #[derive(Resource)]
-struct Menu {
-    page: Page,
+pub(crate) struct Menu {
+    pub(crate) page: Page,
     cursor: usize,
 }
 impl Default for Menu {
@@ -89,11 +90,12 @@ impl Plugin for BattlePlugin {
     }
 }
 
-pub fn player_attack_damage(level: u32) -> f32 {
-    10.0 + level as f32 * 3.0
-}
 pub fn enemy_attack_damage(level: u32) -> f32 {
     4.0 + level as f32 * 1.5
+}
+/// A move's damage: base power scaled gently by level, times type effectiveness.
+pub fn move_damage(power: f32, level: u32, eff: f32) -> f32 {
+    (power + level as f32 * 2.0) * eff
 }
 
 fn start_battle(
@@ -322,9 +324,15 @@ fn menu_input(
     }
 
     let kind = battle.kind.unwrap_or(CreatureKind::Grasshog);
+    let lead_kind = collection
+        .party
+        .first()
+        .map(|l| l.kind)
+        .unwrap_or(CreatureKind::Grasshog);
     // Resolve the selection.
     enum Act {
-        Attack,
+        OpenMove,
+        Move(usize),
         Capture,
         OpenItem,
         Flee,
@@ -334,10 +342,12 @@ fn menu_input(
         Back,
     }
     let act = match (menu.page, menu.cursor) {
-        (Page::Main, 0) => Act::Attack,
+        (Page::Main, 0) => Act::OpenMove,
         (Page::Main, 1) => Act::Capture,
         (Page::Main, 2) => Act::OpenItem,
         (Page::Main, _) => Act::Flee,
+        (Page::Move, 3) => Act::Back,
+        (Page::Move, i) => Act::Move(i),
         (Page::Item, 0) => Act::Heal,
         (Page::Item, 1) => Act::Bait,
         (Page::Item, 2) => Act::Flash,
@@ -345,6 +355,11 @@ fn menu_input(
     };
 
     match act {
+        Act::OpenMove => {
+            menu.page = Page::Move;
+            menu.cursor = 0;
+            return;
+        }
         Act::OpenItem => {
             menu.page = Page::Item;
             menu.cursor = 0;
@@ -360,13 +375,15 @@ fn menu_input(
             next.set(Phase::Roam);
             return;
         }
-        Act::Attack => {
-            let eff = collection
-                .party
-                .first()
-                .map(|l| effectiveness(l.kind.element(), kind.element()))
-                .unwrap_or(1.0);
-            let dmg = player_attack_damage(stats.level) * eff;
+        Act::Move(i) => {
+            let Some(m) = lead_kind.moves().get(i).copied() else { return };
+            if stats.sp < m.sp_cost as f32 {
+                log.0 = format!("Not enough SP for {}!", m.name);
+                return;
+            }
+            stats.sp -= m.sp_cost as f32;
+            let eff = effectiveness(m.element, kind.element());
+            let dmg = move_damage(m.power, stats.level, eff);
             battle.hp = (battle.hp - dmg).max(0.0);
             battle.hit_timer = 0.22;
             battle.player_lunge = LUNGE_DURATION;
@@ -375,7 +392,9 @@ fn menu_input(
                 e if e < 1.0 => "  Not very effective...",
                 _ => "",
             };
-            log.0 = format!("You strike for {dmg:.0}!{tag}");
+            log.0 = format!("{} hits for {dmg:.0}!{tag}", m.name);
+            menu.page = Page::Main;
+            menu.cursor = 0;
         }
         Act::Capture => {
             if inv.capture_disc == 0 {
@@ -405,7 +424,8 @@ fn menu_input(
             }
             inv.heal_spray -= 1;
             stats.hp = (stats.hp + 25.0).min(stats.max_hp);
-            log.0 = "You spray on a heal (+25 HP).".into();
+            stats.sp = (stats.sp + 10.0).min(stats.max_sp);
+            log.0 = "You spray on a heal (+25 HP, +10 SP).".into();
             menu.page = Page::Main;
             menu.cursor = 0;
         }
@@ -657,19 +677,36 @@ fn update_battle_ui(
         );
     }
 
-    let main = [
-        "Attack".to_string(),
-        "Capture".to_string(),
-        "Item".to_string(),
-        "Flee".to_string(),
-    ];
-    let item = [
-        format!("Heal ({})", inv.heal_spray),
-        format!("Bait ({})", inv.bait),
-        format!("Flash ({})", inv.flash_bomb),
-        "Back".to_string(),
-    ];
-    let labels_src = if menu.page == Page::Main { main } else { item };
+    let labels_src = match menu.page {
+        Page::Main => [
+            "Attack".to_string(),
+            "Capture".to_string(),
+            "Item".to_string(),
+            "Flee".to_string(),
+        ],
+        Page::Move => {
+            let lead = collection.party.first().map(|l| l.kind).unwrap_or(CreatureKind::Grasshog);
+            let mvs = lead.moves();
+            let label = |i: usize| {
+                mvs.get(i)
+                    .map(|m| {
+                        if m.sp_cost == 0 {
+                            m.name.to_string()
+                        } else {
+                            format!("{} {}sp", m.name, m.sp_cost)
+                        }
+                    })
+                    .unwrap_or_else(|| "-".to_string())
+            };
+            [label(0), label(1), label(2), "Back".to_string()]
+        }
+        Page::Item => [
+            format!("Heal ({})", inv.heal_spray),
+            format!("Bait ({})", inv.bait),
+            format!("Flash ({})", inv.flash_bomb),
+            "Back".to_string(),
+        ],
+    };
     for (l, mut t) in &mut q.p3() {
         t.0 = labels_src[l.0].clone();
     }
@@ -689,8 +726,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn attack_scales_with_level_and_enemy_hits_back() {
-        assert!(player_attack_damage(10) > player_attack_damage(1));
+    fn enemy_damage_scales_with_level() {
         assert!(enemy_attack_damage(10) > enemy_attack_damage(1));
+    }
+
+    #[test]
+    fn move_damage_respects_effectiveness_and_level() {
+        // Super-effective beats neutral beats not-very-effective at the same level.
+        assert!(move_damage(18.0, 5, 2.0) > move_damage(18.0, 5, 1.0));
+        assert!(move_damage(18.0, 5, 1.0) > move_damage(18.0, 5, 0.5));
+        // Higher level hits harder for the same move.
+        assert!(move_damage(18.0, 20, 1.0) > move_damage(18.0, 1, 1.0));
     }
 }

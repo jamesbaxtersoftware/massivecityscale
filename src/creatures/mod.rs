@@ -40,7 +40,43 @@ pub fn effectiveness(atk: Element, def: Element) -> f32 {
     }
 }
 
+/// A battle move: display name, base power, SP cost and damage element.
+#[derive(Clone, Copy)]
+pub struct Move {
+    pub name: &'static str,
+    pub power: f32,
+    pub sp_cost: u32,
+    pub element: Element,
+}
+
 impl CreatureKind {
+    /// The lead creature's move set: a free typed Tackle plus two SP specials.
+    pub fn moves(self) -> &'static [Move] {
+        use Element::*;
+        match self {
+            CreatureKind::Grasshog => &[
+                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Grass },
+                Move { name: "Vine Lash", power: 18.0, sp_cost: 6, element: Grass },
+                Move { name: "Leaf Storm", power: 26.0, sp_cost: 12, element: Grass },
+            ],
+            CreatureKind::Aquabud => &[
+                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Water },
+                Move { name: "Bubble", power: 18.0, sp_cost: 6, element: Water },
+                Move { name: "Torrent", power: 26.0, sp_cost: 12, element: Water },
+            ],
+            CreatureKind::Rockfang => &[
+                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Rock },
+                Move { name: "Rock Throw", power: 18.0, sp_cost: 6, element: Rock },
+                Move { name: "Boulder", power: 28.0, sp_cost: 13, element: Rock },
+            ],
+            CreatureKind::Flarehog => &[
+                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Fire },
+                Move { name: "Ember", power: 18.0, sp_cost: 6, element: Fire },
+                Move { name: "Flamethrow", power: 26.0, sp_cost: 12, element: Fire },
+            ],
+        }
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             CreatureKind::Grasshog => "Grasshog",
@@ -407,6 +443,21 @@ mod tests {
         assert_eq!(effectiveness(Element::Grass, Element::Fire), 0.5);
         assert_eq!(effectiveness(Element::Fire, Element::Fire), 1.0);
         assert_eq!(effectiveness(Element::Water, Element::Fire), 2.0);
+    }
+
+    #[test]
+    fn every_creature_has_a_free_basic_move() {
+        for k in [
+            CreatureKind::Grasshog,
+            CreatureKind::Aquabud,
+            CreatureKind::Rockfang,
+            CreatureKind::Flarehog,
+        ] {
+            let mvs = k.moves();
+            assert!(!mvs.is_empty(), "{k:?} has moves");
+            assert_eq!(mvs[0].sp_cost, 0, "{k:?}'s first move is free");
+            assert!(mvs.iter().any(|m| m.sp_cost > 0), "{k:?} has an SP special");
+        }
     }
 
     #[test]
