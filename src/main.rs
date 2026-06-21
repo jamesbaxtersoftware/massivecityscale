@@ -44,6 +44,12 @@ fn main() {
         .add_plugins(save::SavePlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
+        // Faint blue fill so planets' shadowed sides read as lit spheres rather
+        // than pure black when you warp in from an arbitrary angle.
+        .insert_resource(AmbientLight {
+            color: Color::srgb(0.55, 0.65, 0.9),
+            brightness: 320.0,
+        })
         .add_systems(Startup, setup);
 
     // On-screen gamepad tester (GR_PADTEST=1): shows live controller input so an
