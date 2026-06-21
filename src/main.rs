@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 mod galaxy;
 mod hud;
+mod onfoot;
 mod origin;
 mod palette;
 mod pause;
@@ -31,6 +32,7 @@ fn main() {
         .add_plugins(spacefx::SpaceFxPlugin)
         .add_plugins(warp::WarpPlugin)
         .add_plugins(hud::HudPlugin)
+        .add_plugins(onfoot::OnFootPlugin)
         .add_plugins(pixelate::PixelatePlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
@@ -79,11 +81,15 @@ fn dev_screenshot(
     mut commands: Commands,
     mut ship: Query<(&mut origin::WorldPos, &mut ship::ShipControl, &mut Transform), With<ship::PlayerShip>>,
     warp_targets: Res<galaxy::WarpTargets>,
+    mut next_mode: ResMut<NextState<onfoot::Mode>>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut exit: EventWriter<AppExit>,
 ) {
     use bevy::render::view::screenshot::{save_to_disk, Screenshot};
     if *frame == 0 {
+        if std::env::var("GR_FOOT").is_ok() {
+            next_mode.set(onfoot::Mode::OnFoot);
+        }
         let g = galaxy::gen::generate(galaxy::WORLD_SEED);
         // GR_NEAR=<index>: place the ship just above that planet's surface.
         if let Ok(idx) = std::env::var("GR_NEAR").and_then(|s| s.parse::<usize>().map_err(|_| std::env::VarError::NotPresent)) {
