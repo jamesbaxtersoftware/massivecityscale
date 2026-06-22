@@ -288,6 +288,7 @@ fn dev_screenshot(
                 enemy_ailment_turns: 0,
                 player_ailment: None,
                 player_ailment_turns: 0,
+                rare: std::env::var("GR_RARE").is_ok(),
             };
         }
         let g = galaxy::gen::generate(galaxy::WORLD_SEED);

@@ -188,6 +188,7 @@ pub struct Creature {
     pub level: u32,
     pub hp: f32,
     pub max_hp: f32,
+    pub rare: bool,
     wander_target: Vec3,
     wander_timer: f32,
 }
@@ -307,6 +308,7 @@ pub fn build_creature_children(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     color: Color,
+    rare: bool,
     layer: &RenderLayers,
 ) {
     let body_mesh = meshes.add(Sphere::new(0.6).mesh().ico(3).unwrap());
@@ -315,7 +317,9 @@ pub fn build_creature_children(
     let pupil_mesh = meshes.add(Sphere::new(0.05).mesh().ico(1).unwrap());
     let leg_mesh = meshes.add(Cuboid::new(0.18, 0.35, 0.18));
     let horn_mesh = meshes.add(Cone { radius: 0.14, height: 0.4 });
-    let body_mat = materials.add(StandardMaterial { base_color: color, ..default() });
+    // Rare creatures glow gold so they stand out on the surface.
+    let emissive = if rare { LinearRgba::rgb(0.85, 0.65, 0.15) } else { LinearRgba::BLACK };
+    let body_mat = materials.add(StandardMaterial { base_color: color, emissive, ..default() });
     let belly_mat = materials.add(StandardMaterial {
         base_color: color.mix(&Color::WHITE, 0.35),
         ..default()
@@ -383,7 +387,9 @@ fn spawn_creatures(
     let mut rng = rand::thread_rng();
     for _ in 0..COUNT {
         let kind = pool[rng.gen_range(0..pool.len())];
-        let level = rng.gen_range(2..18);
+        // ~12% are rare: stronger (higher level) and worth more. GR_RARE forces it.
+        let rare = std::env::var("GR_RARE").is_ok() || rng.gen_bool(0.12);
+        let level = rng.gen_range(2..18) + if rare { rng.gen_range(4..8) } else { 0 };
         let max_hp = 20.0 + level as f32 * 4.0;
         let (cx, cz) = (rng.gen_range(-FIELD..FIELD), rng.gen_range(-FIELD..FIELD));
         let pos = Vec3::new(cx, crate::onfoot::surface_height(cx, cz), cz);
@@ -394,6 +400,7 @@ fn spawn_creatures(
                     level,
                     hp: max_hp,
                     max_hp,
+                    rare,
                     wander_target: pos,
                     wander_timer: rng.gen_range(0.0..3.0),
                 },
@@ -402,7 +409,7 @@ fn spawn_creatures(
                 Visibility::default(),
             ))
             .with_children(|cr| {
-                build_creature_children(cr, &mut meshes, &mut materials, kind.color(), &layer);
+                build_creature_children(cr, &mut meshes, &mut materials, kind.color(), rare, &layer);
             });
     }
 }

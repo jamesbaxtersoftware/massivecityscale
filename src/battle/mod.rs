@@ -42,6 +42,7 @@ pub struct Battle {
     pub enemy_ailment_turns: u32,
     pub player_ailment: Option<Ailment>,
     pub player_ailment_turns: u32,
+    pub rare: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -107,6 +108,8 @@ pub fn enemy_damage(power: f32, level: u32, eff: f32) -> f32 {
 const AILMENT_TURNS: u32 = 3;
 /// Extra crystals for registering a species in the dex for the first time.
 const NEW_SPECIES_BONUS: u32 = 60;
+/// Extra crystals for catching a rare creature.
+const RARE_BONUS: u32 = 80;
 
 fn start_battle(
     keys: Res<ButtonInput<KeyCode>>,
@@ -137,6 +140,7 @@ fn start_battle(
         enemy_ailment_turns: 0,
         player_ailment: None,
         player_ailment_turns: 0,
+        rare: c.rare,
     };
     next.set(Phase::Encounter);
 }
@@ -258,7 +262,7 @@ fn spawn_player_creature(
             Visibility::default(),
         ))
         .with_children(|cr| {
-            build_creature_children(cr, &mut meshes, &mut materials, kind.color(), &layer);
+            build_creature_children(cr, &mut meshes, &mut materials, kind.color(), false, &layer);
         });
 }
 
@@ -442,6 +446,10 @@ fn menu_input(
                 let levels = gain_exp(&mut stats, battle.level * 20);
                 wallet.crystals += CAPTURE_REWARD;
                 toasts.push(format!("Caught {}!", kind.name()));
+                if battle.rare {
+                    wallet.crystals += RARE_BONUS;
+                    toasts.push(format!("It was rare!  +{RARE_BONUS}"));
+                }
                 if new_species {
                     wallet.crystals += NEW_SPECIES_BONUS;
                     let dex = CreatureKind::ALL
@@ -811,7 +819,8 @@ fn update_battle_ui(
             .enemy_ailment
             .map(|a| format!("   [{}]", a.label()))
             .unwrap_or_default();
-        t.0 = format!("Wild {kind:?}   Lv{}{ail}", battle.level);
+        let rare = if battle.rare { "Rare " } else { "Wild " };
+        t.0 = format!("{rare}{kind:?}   Lv{}{ail}", battle.level);
     }
     if let Ok(mut t) = q.p1().get_single_mut() {
         t.0 = log.0.clone();
