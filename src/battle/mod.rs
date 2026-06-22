@@ -152,7 +152,8 @@ fn spawn_encounter_overlay(mut commands: Commands, mut timer: ResMut<EncounterTi
             height: Val::Percent(100.0),
             ..default()
         },
-        BackgroundColor(Color::BLACK),
+        // Start transparent and fade in (see encounter_anim) — no flashing.
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)),
         GlobalZIndex(1000),
     ));
 }
@@ -171,13 +172,12 @@ fn encounter_anim(
 ) {
     timer.0 += time.delta_secs();
     let t = timer.0;
-    let color = if t < 0.55 && (t * 14.0) as i32 % 2 == 0 {
-        Color::srgb(1.0, 1.0, 1.0)
-    } else {
-        Color::BLACK
-    };
+    // Smooth (smoothstep) fade to opaque dark over the first ~0.5s, then hold —
+    // a calm transition with no strobing.
+    let a = (t / 0.5).clamp(0.0, 1.0);
+    let a = a * a * (3.0 - 2.0 * a);
     if let Ok(mut bg) = overlay.get_single_mut() {
-        bg.0 = color;
+        bg.0 = Color::srgba(0.02, 0.03, 0.06, a);
     }
     if t >= ENCOUNTER_DURATION {
         next.set(Phase::Battle);
