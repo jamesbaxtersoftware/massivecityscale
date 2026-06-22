@@ -194,9 +194,11 @@ pub fn exp_to_next(level: u32) -> u32 {
     50 + level * 50
 }
 
-/// Apply EXP, leveling up (carrying overflow) and growing stats.
-pub fn gain_exp(stats: &mut PlayerStats, amount: u32) {
+/// Apply EXP, leveling up (carrying overflow) and growing stats. Returns the
+/// number of levels gained so callers can surface a level-up notice.
+pub fn gain_exp(stats: &mut PlayerStats, amount: u32) -> u32 {
     stats.exp += amount;
+    let mut levels = 0;
     while stats.exp >= exp_to_next(stats.level) {
         stats.exp -= exp_to_next(stats.level);
         stats.level += 1;
@@ -204,7 +206,9 @@ pub fn gain_exp(stats: &mut PlayerStats, amount: u32) {
         stats.hp = stats.max_hp;
         stats.max_sp += 3.0;
         stats.sp = stats.max_sp;
+        levels += 1;
     }
+    levels
 }
 
 /// Crystals reward per successful capture.

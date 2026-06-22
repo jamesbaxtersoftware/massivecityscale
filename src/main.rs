@@ -16,6 +16,7 @@ mod spacefx;
 mod streaming;
 mod targeting;
 mod terrain;
+mod toast;
 mod warp;
 
 fn main() {
@@ -44,6 +45,7 @@ fn main() {
         .add_plugins(pixelate::PixelatePlugin)
         .add_plugins(save::SavePlugin)
         .add_plugins(party::PartyViewPlugin)
+        .add_plugins(toast::ToastPlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         // Faint blue fill so planets' shadowed sides read as lit spheres rather
@@ -175,6 +177,16 @@ fn pad_debug_update(
 }
 
 /// DEV-only: optionally teleport the ship (GR_SHIPZ), wait for the scene to settle,
+/// Dev-only resources the screenshot harness mutates, bundled to keep
+/// `dev_screenshot` under Bevy's 16-system-param limit.
+#[derive(bevy::ecs::system::SystemParam)]
+struct DevSpawns<'w> {
+    battle_menu: ResMut<'w, battle::Menu>,
+    collection: ResMut<'w, creatures::Collection>,
+    party_view: ResMut<'w, party::PartyView>,
+    toasts: ResMut<'w, toast::Toasts>,
+}
+
 /// save a screenshot to GR_SHOT, then exit. Gated by the GR_SHOT env var.
 fn dev_screenshot(
     mut frame: Local<u32>,
@@ -186,10 +198,8 @@ fn dev_screenshot(
     mut autopilot: ResMut<targeting::Autopilot>,
     mut next_phase: ResMut<NextState<battle::Phase>>,
     mut battle_res: ResMut<battle::Battle>,
-    mut battle_menu: ResMut<battle::Menu>,
     mut landed_biome: ResMut<onfoot::LandedBiome>,
-    mut collection: ResMut<creatures::Collection>,
-    mut party_view: ResMut<party::PartyView>,
+    mut dev: DevSpawns,
     creatures_q: Query<(Entity, &creatures::Creature)>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut exit: EventWriter<AppExit>,
@@ -197,9 +207,13 @@ fn dev_screenshot(
     // GR_PARTY: seed a couple of catches and open the party viewer.
     if *frame == 6 && std::env::var("GR_PARTY").is_ok() {
         use creatures::{CaughtCreature, CreatureKind};
-        collection.party.push(CaughtCreature { kind: CreatureKind::Aquabud, level: 7 });
-        collection.party.push(CaughtCreature { kind: CreatureKind::Flarehog, level: 11 });
-        party_view.open = true;
+        dev.collection.party.push(CaughtCreature { kind: CreatureKind::Aquabud, level: 7 });
+        dev.collection.party.push(CaughtCreature { kind: CreatureKind::Flarehog, level: 11 });
+        dev.party_view.open = true;
+    }
+    if *frame == 6 && std::env::var("GR_TOAST").is_ok() {
+        dev.toasts.push("Caught Aquabud!");
+        dev.toasts.push("Level up!  Lv.6");
     }
     // GR_BATTLE: once creatures exist, point the battle at a real one (for the camera).
     if *frame == 6 && std::env::var("GR_BATTLE").is_ok() {
@@ -223,6 +237,7 @@ fn dev_screenshot(
         if std::env::var("GR_FOOT").is_ok()
             || std::env::var("GR_BATTLE").is_ok()
             || std::env::var("GR_PARTY").is_ok()
+            || std::env::var("GR_TOAST").is_ok()
         {
             next_mode.set(onfoot::Mode::OnFoot);
         }
@@ -274,7 +289,7 @@ fn dev_screenshot(
     // GR_BATTLE: drive the attack animation so the capture frame shows mid-lunge.
     if *frame == 89 && std::env::var("GR_BATTLE").is_ok() {
         if std::env::var("GR_MOVES").is_ok() {
-            battle_menu.page = battle::Page::Move;
+            dev.battle_menu.page = battle::Page::Move;
         } else {
             battle_res.player_lunge = 0.16;
             battle_res.hit_timer = 0.12;

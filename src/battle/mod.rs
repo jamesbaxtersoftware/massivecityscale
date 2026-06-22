@@ -290,6 +290,7 @@ fn menu_input(
     mut collection: ResMut<Collection>,
     mut wallet: ResMut<Wallet>,
     mut log: ResMut<BattleLog>,
+    mut toasts: ResMut<crate::toast::Toasts>,
     mut next: ResMut<NextState<Phase>>,
     mut commands: Commands,
 ) {
@@ -411,8 +412,12 @@ fn menu_input(
                     commands.entity(e).despawn();
                 }
                 collection.party.push(CaughtCreature { kind, level: battle.level });
-                gain_exp(&mut stats, battle.level * 20);
+                let levels = gain_exp(&mut stats, battle.level * 20);
                 wallet.crystals += CAPTURE_REWARD;
+                toasts.push(format!("Caught {}!", kind.name()));
+                if levels > 0 {
+                    toasts.push(format!("Level up!  Lv.{}", stats.level));
+                }
                 log.0 = format!("Gotcha! {kind:?} was caught!");
                 next.set(Phase::Roam);
                 return;
@@ -460,7 +465,10 @@ fn menu_input(
         if let Some(e) = battle.enemy {
             commands.entity(e).despawn();
         }
-        gain_exp(&mut stats, battle.level * 8);
+        let levels = gain_exp(&mut stats, battle.level * 8);
+        if levels > 0 {
+            toasts.push(format!("Level up!  Lv.{}", stats.level));
+        }
         log.0 = format!("The {kind:?} fled, exhausted.");
         next.set(Phase::Roam);
         return;
