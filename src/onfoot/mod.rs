@@ -108,14 +108,14 @@ pub enum Biome {
 }
 
 impl Biome {
-    pub fn from_pos(pos: bevy::math::DVec3) -> Self {
-        let h = (pos.x.abs() as u64).wrapping_mul(7) ^ (pos.z.abs() as u64).wrapping_mul(13);
-        match h % 5 {
-            0 => Biome::Grass,
-            1 => Biome::Desert,
-            2 => Biome::Tundra,
-            3 => Biome::Volcanic,
-            _ => Biome::Alien,
+    /// Surface biome that matches how the planet looks from space, so landing on a
+    /// blue water world drops you in a verdant biome, a fiery one in volcanic, etc.
+    pub fn from_planet(kind: crate::galaxy::gen::PlanetType) -> Self {
+        use crate::galaxy::gen::PlanetType;
+        match kind {
+            PlanetType::Water => Biome::Grass,
+            PlanetType::Rock => Biome::Desert,
+            PlanetType::Fire => Biome::Volcanic,
         }
     }
     pub fn label(self) -> &'static str {
@@ -223,15 +223,15 @@ fn land_input(
         return;
     }
     let Ok(s) = ship.get_single() else { return };
-    let mut best: Option<(f64, bevy::math::DVec3)> = None;
+    let mut best: Option<(f64, crate::galaxy::gen::PlanetType)> = None;
     for (p, b) in &planets {
         let d = (p.0 - s.0).length() - b.radius as f64;
         if d <= LAND_RANGE && best.map_or(true, |(bd, _)| d < bd) {
-            best = Some((d, p.0));
+            best = Some((d, b.kind));
         }
     }
-    if let Some((_, pos)) = best {
-        landed.0 = Biome::from_pos(pos);
+    if let Some((_, kind)) = best {
+        landed.0 = Biome::from_planet(kind);
         next.set(Mode::OnFoot);
     }
 }
@@ -530,6 +530,14 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use std::time::Duration;
+
+    #[test]
+    fn biome_matches_planet_type() {
+        use crate::galaxy::gen::PlanetType;
+        assert_eq!(Biome::from_planet(PlanetType::Water), Biome::Grass);
+        assert_eq!(Biome::from_planet(PlanetType::Rock), Biome::Desert);
+        assert_eq!(Biome::from_planet(PlanetType::Fire), Biome::Volcanic);
+    }
 
     #[test]
     fn w_walks_avatar_forward_and_clamps_to_ground() {

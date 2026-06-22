@@ -20,6 +20,7 @@ pub struct StarBody;
 #[derive(Component)]
 pub struct PlanetBody {
     pub radius: f32,
+    pub kind: gen::PlanetType,
 }
 
 /// Far backdrop (stars, nebulae): kept at a fixed direction+distance from the ship
@@ -146,7 +147,7 @@ fn spawn_galaxy(
         let r = planet.radius as f32;
         commands
             .spawn((
-                PlanetBody { radius: r },
+                PlanetBody { radius: r, kind: planet.kind },
                 WorldPos(planet.pos),
                 Mesh3d(meshes.add(Sphere::new(r).mesh().ico(4).unwrap())),
                 MeshMaterial3d(materials.add(StandardMaterial {
@@ -194,7 +195,7 @@ fn spawn_galaxy(
         let ppos = sun_pos + DVec3::new(1.0e10, 0.0, 0.0);
         commands
             .spawn((
-                PlanetBody { radius: r },
+                PlanetBody { radius: r, kind: far_kinds[i] },
                 WorldPos(ppos),
                 Mesh3d(meshes.add(Sphere::new(r).mesh().ico(4).unwrap())),
                 MeshMaterial3d(materials.add(StandardMaterial {

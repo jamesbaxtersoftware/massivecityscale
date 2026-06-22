@@ -414,8 +414,8 @@ fn update_hud(
         t.0 = format!("\u{25C6} {}", wallet.crystals);
     }
     // Prefer the selected target's live distance; else the nearest world.
-    let (label, dist, target_pos) = match targets.selected.and_then(|e| target_q.get(e).ok()) {
-        Some((p, body)) => ("TARGET", (p.0 - swp.0).length() - body.radius as f64, Some(p.0)),
+    let (label, dist, target_kind) = match targets.selected.and_then(|e| target_q.get(e).ok()) {
+        Some((p, body)) => ("TARGET", (p.0 - swp.0).length() - body.radius as f64, Some(body.kind)),
         None => {
             let mut n = f64::MAX;
             for (p, body) in &planets {
@@ -435,9 +435,9 @@ fn update_hud(
             let warp = if autopilot.on { "  \u{25B6} WARP" } else { "" };
             // Predict the target's biome (matches what you land in) and its
             // signature species, so you can hunt specific creatures for the dex.
-            let biome_line = match target_pos {
-                Some(pos) => {
-                    let b = crate::onfoot::Biome::from_pos(pos);
+            let biome_line = match target_kind {
+                Some(kind) => {
+                    let b = crate::onfoot::Biome::from_planet(kind);
                     let sig = crate::creatures::CreatureKind::biome_pool(b)[0].name();
                     format!("\n{} - {}", b.label(), sig)
                 }

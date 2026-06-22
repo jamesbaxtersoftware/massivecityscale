@@ -298,7 +298,7 @@ mod tests {
         app.add_plugins(MinimalPlugins);
         // Planet of radius 300 km at +200 on Z; ship just inside heading inward.
         app.world_mut().spawn((
-            PlanetBody { radius: 300.0 },
+            PlanetBody { radius: 300.0, kind: crate::galaxy::gen::PlanetType::Rock },
             WorldPos(DVec3::new(0.0, 0.0, 0.0)),
         ));
         let ship = app.world_mut().spawn((
