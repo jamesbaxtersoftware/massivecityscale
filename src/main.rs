@@ -223,6 +223,18 @@ fn dev_screenshot(
     if *frame == 6 && std::env::var("GR_HELP").is_ok() {
         dev.help_view.open = true;
     }
+    // GR_ENCOUNTER: trigger the encounter fade a few frames before capture so the
+    // screenshot lands mid-transition (verifies it's a calm fade, not a strobe).
+    if *frame == 72 && std::env::var("GR_ENCOUNTER").is_ok() {
+        if let Some((e, c)) = creatures_q.iter().next() {
+            battle_res.enemy = Some(e);
+            battle_res.kind = Some(c.kind);
+            battle_res.level = c.level;
+            battle_res.hp = c.hp;
+            battle_res.max_hp = c.max_hp;
+        }
+        next_phase.set(battle::Phase::Encounter);
+    }
     // GR_BATTLE: once creatures exist, point the battle at a real one (for the camera).
     if *frame == 6 && std::env::var("GR_BATTLE").is_ok() {
         if let Some((e, c)) = creatures_q.iter().next() {
@@ -246,6 +258,7 @@ fn dev_screenshot(
             || std::env::var("GR_BATTLE").is_ok()
             || std::env::var("GR_PARTY").is_ok()
             || std::env::var("GR_TOAST").is_ok()
+            || std::env::var("GR_ENCOUNTER").is_ok()
         {
             next_mode.set(onfoot::Mode::OnFoot);
         }
