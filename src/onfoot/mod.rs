@@ -11,9 +11,44 @@ use bevy::render::view::RenderLayers;
 use noise::{NoiseFn, Perlin};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use bevy::math::DVec3;
+use crate::galaxy::gen::PlanetType;
 use crate::galaxy::PlanetBody;
 use crate::origin::{FrameSet, WorldPos};
-use crate::ship::PlayerShip;
+use crate::ship::{PlayerShip, ShipVelocity};
+
+/// Seconds the cinematic descent takes before the surface scene loads.
+const LAND_TIME: f32 = 2.4;
+
+/// An in-progress cinematic landing: the ship dives toward the planet, then the
+/// surface scene loads. `active` is read by flight systems so they yield control.
+#[derive(Resource, Default)]
+pub struct Landing {
+    pub active: bool,
+    t: f32,
+    start: DVec3,
+    target: DVec3,
+    center: DVec3,
+    kind: Option<PlanetType>,
+}
+
+impl Landing {
+    /// Begin a descent from `ship` toward the planet at `center` (radius `radius`).
+    pub fn start_to(&mut self, ship: DVec3, center: DVec3, radius: f64, kind: PlanetType) {
+        let dir = (ship - center).normalize();
+        *self = Landing {
+            active: true,
+            t: 0.0,
+            start: ship,
+            target: center + dir * (radius * 1.05),
+            center,
+            kind: Some(kind),
+        };
+    }
+}
+
+#[derive(Component)]
+struct LandingFade;
 
 /// Surface entities render on this layer; the camera switches to it on foot.
 pub const SURFACE_LAYER: usize = 1;
@@ -177,6 +212,7 @@ impl Plugin for OnFootPlugin {
         app.init_state::<Mode>()
             .init_resource::<FootCam>()
             .init_resource::<LandedBiome>()
+            .init_resource::<Landing>()
             // Flight systems run only in flight (so WASD doesn't also fly the ship).
             .configure_sets(
                 Update,
@@ -191,6 +227,10 @@ impl Plugin for OnFootPlugin {
                     .run_if(in_state(Mode::Flight)),
             )
             .add_systems(Update, land_input.run_if(in_state(Mode::Flight)))
+            // The descent drives the ship, so it runs in the Move slot (before
+            // origin recentres) and only in flight.
+            .add_systems(Update, landing_anim.in_set(FrameSet::Move))
+            .add_systems(Update, landing_fade_out.run_if(in_state(Mode::OnFoot)))
             .add_systems(
                 Update,
                 foot_camera
@@ -209,30 +249,98 @@ impl Plugin for OnFootPlugin {
     }
 }
 
-/// F lands when close enough to a planet surface.
+/// F begins a cinematic landing when close enough to a planet surface.
 fn land_input(
     keys: Res<ButtonInput<KeyCode>>,
     gamepads: Query<&Gamepad>,
-    mut next: ResMut<NextState<Mode>>,
-    mut landed: ResMut<LandedBiome>,
+    mut landing: ResMut<Landing>,
     ship: Query<&WorldPos, With<PlayerShip>>,
     planets: Query<(&WorldPos, &PlanetBody)>,
+    mut commands: Commands,
 ) {
+    if landing.active {
+        return;
+    }
     let pad = gamepads.iter().next().is_some_and(|g| g.just_pressed(GamepadButton::North));
     if !(keys.just_pressed(KeyCode::KeyF) || pad) {
         return;
     }
     let Ok(s) = ship.get_single() else { return };
-    let mut best: Option<(f64, crate::galaxy::gen::PlanetType)> = None;
+    let mut best: Option<(f64, PlanetType, DVec3, f32)> = None;
     for (p, b) in &planets {
         let d = (p.0 - s.0).length() - b.radius as f64;
-        if d <= LAND_RANGE && best.map_or(true, |(bd, _)| d < bd) {
-            best = Some((d, b.kind));
+        if d <= LAND_RANGE && best.map_or(true, |(bd, ..)| d < bd) {
+            best = Some((d, b.kind, p.0, b.radius));
         }
     }
-    if let Some((_, kind)) = best {
-        landed.0 = Biome::from_planet(kind);
+    if let Some((_, kind, center, radius)) = best {
+        landing.start_to(s.0, center, radius as f64, kind);
+        // Full-screen overlay, transparent until the descent's final stretch.
+        commands.spawn((
+            LandingFade,
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)),
+            GlobalZIndex(1000),
+        ));
+    }
+}
+
+/// Drive the descent: dive the ship toward the planet (it grows in view), pitch
+/// the nose down, fade out, then load the surface scene.
+#[allow(clippy::type_complexity)]
+fn landing_anim(
+    time: Res<Time>,
+    mut landing: ResMut<Landing>,
+    mut ship: Query<(&mut WorldPos, &mut Transform, &mut ShipVelocity), With<PlayerShip>>,
+    mut landed: ResMut<LandedBiome>,
+    mut next: ResMut<NextState<Mode>>,
+    mut fades: Query<&mut BackgroundColor, With<LandingFade>>,
+) {
+    if !landing.active {
+        return;
+    }
+    let Ok((mut wp, mut tf, mut vel)) = ship.get_single_mut() else { return };
+    landing.t += time.delta_secs() / LAND_TIME;
+    let tt = landing.t.min(1.0);
+    let k = tt * tt * (3.0 - 2.0 * tt); // smoothstep ease
+    wp.0 = landing.start.lerp(landing.target, k as f64);
+    vel.0 = Vec3::ZERO;
+    let to_center = (landing.center - wp.0).as_vec3();
+    if to_center.length_squared() > 1e-6 {
+        tf.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, to_center.normalize());
+    }
+    // Fade to dark over the final 40% to hide the scene swap.
+    let fade = ((landing.t - 0.6) / 0.4).clamp(0.0, 1.0);
+    for mut bg in &mut fades {
+        bg.0 = Color::srgba(0.02, 0.03, 0.06, fade);
+    }
+    if landing.t >= 1.0 {
+        landing.active = false;
+        if let Some(kind) = landing.kind {
+            landed.0 = Biome::from_planet(kind);
+        }
         next.set(Mode::OnFoot);
+    }
+}
+
+/// Once on the surface, fade the landing overlay back out and remove it.
+fn landing_fade_out(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &mut BackgroundColor), With<LandingFade>>,
+) {
+    for (e, mut bg) in &mut q {
+        let a = bg.0.alpha() - time.delta_secs() * 2.5;
+        if a <= 0.0 {
+            commands.entity(e).despawn();
+        } else {
+            bg.0 = bg.0.with_alpha(a);
+        }
     }
 }
 

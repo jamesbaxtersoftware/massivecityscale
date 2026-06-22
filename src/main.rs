@@ -190,6 +190,7 @@ struct DevSpawns<'w> {
     party_view: ResMut<'w, party::PartyView>,
     toasts: ResMut<'w, toast::Toasts>,
     help_view: ResMut<'w, help::HelpView>,
+    landing: ResMut<'w, onfoot::Landing>,
 }
 
 /// save a screenshot to GR_SHOT, then exit. Gated by the GR_SHOT env var.
@@ -305,6 +306,15 @@ fn dev_screenshot(
                 ctl.yaw = 0.0;
                 ctl.pitch = 0.0;
                 tf.rotation = ship::physics::ship_rotation(0.0, 0.0);
+            }
+        }
+        // GR_LAND: place the ship a few thousand km out and start a descent so the
+        // capture lands mid-dive (planet growing in view).
+        if std::env::var("GR_LAND").is_ok() {
+            if let (Some(p), Ok((mut wp, _, _))) = (g.planets.first(), ship.get_single_mut()) {
+                let dir = bevy::math::DVec3::new(0.0, 0.0, 1.0);
+                wp.0 = p.pos + dir * (p.radius + 3.0e6);
+                dev.landing.start_to(wp.0, p.pos, p.radius, p.kind);
             }
         }
         for (i, p) in g.planets.iter().enumerate() {

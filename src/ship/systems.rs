@@ -162,9 +162,13 @@ pub fn flight_input(
     tune: Res<FlightTuning>,
     gamepads: Query<&Gamepad>,
     mut mouse_motion: EventReader<bevy::input::mouse::MouseMotion>,
+    landing: Res<crate::onfoot::Landing>,
     mut ship_q: Query<(&mut Transform, &mut ShipVelocity, &mut ShipControl), With<PlayerShip>>,
 ) {
     use super::physics::MAX_PITCH;
+    if landing.active {
+        return; // the landing animation has the helm
+    }
     let dt = time.delta_secs();
     let Ok((mut tf, mut vel, mut ctl)) = ship_q.get_single_mut() else { return };
     let gp = gamepads.iter().next();
@@ -207,11 +211,15 @@ pub fn flight_input(
 /// relative to each planet, where the offset is small enough to stay precise.
 pub fn ship_move(
     time: Res<Time>,
+    landing: Res<crate::onfoot::Landing>,
     planets: Query<(&WorldPos, &crate::galaxy::PlanetBody)>,
     mut ship_q: Query<(&mut WorldPos, &mut ShipVelocity, &PlayerShip), Without<crate::galaxy::PlanetBody>>,
 ) {
     use super::physics::clamp_to_planet;
     const PLANET_MARGIN: f32 = 0.1; // km clearance so the ship can still reach the surface
+    if landing.active {
+        return; // landing_anim is driving the ship's position
+    }
     let dt = time.delta_secs();
     let Ok((mut wp, mut vel, ship)) = ship_q.get_single_mut() else { return };
     wp.0 += (vel.0 * dt).as_dvec3();
@@ -276,6 +284,7 @@ mod tests {
     fn ship_move_advances_world_pos_along_velocity() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
+        app.insert_resource(crate::onfoot::Landing::default());
         let e = app.world_mut().spawn((
             PlayerShip { radius: 10.0 },
             ShipVelocity(Vec3::new(0.0, 0.0, -100.0)),
@@ -296,6 +305,7 @@ mod tests {
         use crate::galaxy::PlanetBody;
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
+        app.insert_resource(crate::onfoot::Landing::default());
         // Planet of radius 300 km at +200 on Z; ship just inside heading inward.
         app.world_mut().spawn((
             PlanetBody { radius: 300.0, kind: crate::galaxy::gen::PlanetType::Rock },
