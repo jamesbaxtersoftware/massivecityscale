@@ -108,7 +108,7 @@ pub enum Biome {
 }
 
 impl Biome {
-    fn from_pos(pos: bevy::math::DVec3) -> Self {
+    pub fn from_pos(pos: bevy::math::DVec3) -> Self {
         let h = (pos.x.abs() as u64).wrapping_mul(7) ^ (pos.z.abs() as u64).wrapping_mul(13);
         match h % 5 {
             0 => Biome::Grass,
@@ -116,6 +116,15 @@ impl Biome {
             2 => Biome::Tundra,
             3 => Biome::Volcanic,
             _ => Biome::Alien,
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Biome::Grass => "Verdant",
+            Biome::Desert => "Desert",
+            Biome::Tundra => "Tundra",
+            Biome::Volcanic => "Volcanic",
+            Biome::Alien => "Alien",
         }
     }
     fn sky(self) -> Color {

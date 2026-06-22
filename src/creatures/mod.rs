@@ -168,7 +168,7 @@ impl CreatureKind {
         }
     }
     /// Weighted pool for a biome, so creatures suit the world you land on.
-    fn biome_pool(biome: crate::onfoot::Biome) -> &'static [CreatureKind] {
+    pub fn biome_pool(biome: crate::onfoot::Biome) -> &'static [CreatureKind] {
         use crate::onfoot::Biome::*;
         use CreatureKind::*;
         match biome {
