@@ -40,6 +40,8 @@ pub struct Battle {
     pub enemy_stunned: bool,
     pub enemy_ailment: u32,
     pub enemy_ailment_label: &'static str,
+    pub player_ailment: u32,
+    pub player_ailment_label: &'static str,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -135,6 +137,8 @@ fn start_battle(
         enemy_stunned: false,
         enemy_ailment: 0,
         enemy_ailment_label: "",
+        player_ailment: 0,
+        player_ailment_label: "",
     };
     next.set(Phase::Encounter);
 }
@@ -510,8 +514,21 @@ fn menu_input(
     stats.hp = (stats.hp - edmg).max(0.0);
     let tag = if eff > 1.0 { "  It's a rough matchup!" } else { "" };
     log.0 = format!("{}  Wild {kind:?} used {} for {edmg:.0}!{tag}", log.0, m.name);
+    if m.ailment && battle.player_ailment == 0 {
+        battle.player_ailment = AILMENT_TURNS;
+        battle.player_ailment_label = m.element.ailment_label();
+        log.0 = format!("{}  You are {}!", log.0, battle.player_ailment_label);
+    }
+    // Your own ailment ticks at the end of the round.
+    if battle.player_ailment > 0 {
+        let d = ailment_damage(battle.level);
+        stats.hp = (stats.hp - d).max(0.0);
+        battle.player_ailment -= 1;
+        log.0 = format!("{}  You suffer {} (-{d:.0}).", log.0, battle.player_ailment_label);
+    }
     if stats.hp <= 0.0 {
         stats.hp = stats.max_hp * 0.5;
+        battle.player_ailment = 0;
         log.0 = "You were overwhelmed — retreated to safety!".into();
         next.set(Phase::Roam);
     }
@@ -752,8 +769,13 @@ fn update_battle_ui(
             .first()
             .map(|l| format!("{} Lv{}   ", l.kind.name(), l.level))
             .unwrap_or_default();
+        let ail = if battle.player_ailment > 0 {
+            format!("   [{}]", battle.player_ailment_label)
+        } else {
+            String::new()
+        };
         t.0 = format!(
-            "{lead}YOU  HP {:.0}/{:.0}  SP {:.0}/{:.0}",
+            "{lead}YOU  HP {:.0}/{:.0}  SP {:.0}/{:.0}{ail}",
             stats.hp, stats.max_hp, stats.sp, stats.max_sp
         );
     }

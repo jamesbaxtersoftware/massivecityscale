@@ -264,6 +264,8 @@ fn dev_screenshot(
                 enemy_stunned: false,
                 enemy_ailment: 0,
                 enemy_ailment_label: "",
+                player_ailment: 0,
+                player_ailment_label: "",
             };
         }
         let g = galaxy::gen::generate(galaxy::WORLD_SEED);
@@ -295,6 +297,8 @@ fn dev_screenshot(
         } else if std::env::var("GR_AILMENT").is_ok() {
             battle_res.enemy_ailment = 2;
             battle_res.enemy_ailment_label = "Burned";
+            battle_res.player_ailment = 2;
+            battle_res.player_ailment_label = "Drenched";
             battle_res.hit_timer = 0.12;
         } else {
             battle_res.player_lunge = 0.16;
