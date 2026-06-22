@@ -11,6 +11,7 @@ mod palette;
 mod party;
 mod pause;
 mod pixelate;
+mod radar;
 mod save;
 mod ship;
 mod spacefx;
@@ -48,6 +49,7 @@ fn main() {
         .add_plugins(party::PartyViewPlugin)
         .add_plugins(toast::ToastPlugin)
         .add_plugins(help::HelpPlugin)
+        .add_plugins(radar::RadarPlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         // Faint blue fill so planets' shadowed sides read as lit spheres rather
