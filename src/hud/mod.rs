@@ -381,6 +381,7 @@ fn update_hud(
     objective: Res<Objective>,
     targets: Res<crate::targeting::Targets>,
     autopilot: Res<crate::targeting::Autopilot>,
+    landing: Res<crate::onfoot::Landing>,
     ship: Query<(&WorldPos, &ShipVelocity), With<PlayerShip>>,
     planets: Query<(&WorldPos, &PlanetBody), Without<PlayerShip>>,
     target_q: Query<(&WorldPos, &PlanetBody)>,
@@ -456,6 +457,7 @@ fn update_hud(
         .fold(f64::MAX, f64::min);
     if let Ok(mut t) = texts.p4().get_single_mut() {
         t.0 = if *mode.get() == crate::onfoot::Mode::Flight
+            && !landing.active
             && nearest_surface <= crate::onfoot::LAND_RANGE
         {
             "\u{25B6} PRESS F TO LAND".into()

@@ -22,13 +22,17 @@ const LAND_TIME: f32 = 2.4;
 
 /// An in-progress cinematic landing: the ship dives toward the planet, then the
 /// surface scene loads. `active` is read by flight systems so they yield control.
+/// Altitude (m) the ship pulls back to when taking off.
+const ASCENT_ALT: f64 = 3.0e6;
+
 #[derive(Resource, Default)]
 pub struct Landing {
     pub active: bool,
+    /// true = descending to land, false = ascending to take off.
+    descending: bool,
     t: f32,
     start: DVec3,
     target: DVec3,
-    center: DVec3,
     kind: Option<PlanetType>,
 }
 
@@ -38,11 +42,24 @@ impl Landing {
         let dir = (ship - center).normalize();
         *self = Landing {
             active: true,
+            descending: true,
             t: 0.0,
             start: ship,
             target: center + dir * (radius * 1.05),
-            center,
             kind: Some(kind),
+        };
+    }
+
+    /// Begin an ascent: pull the ship back up to flight altitude away from `center`.
+    pub fn start_ascent(&mut self, ship: DVec3, center: DVec3, radius: f64) {
+        let dir = (ship - center).normalize();
+        *self = Landing {
+            active: true,
+            descending: false,
+            t: 0.0,
+            start: ship,
+            target: center + dir * (radius + ASCENT_ALT),
+            kind: None,
         };
     }
 }
@@ -275,19 +292,24 @@ fn land_input(
     }
     if let Some((_, kind, center, radius)) = best {
         landing.start_to(s.0, center, radius as f64, kind);
-        // Full-screen overlay, transparent until the descent's final stretch.
-        commands.spawn((
-            LandingFade,
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)),
-            GlobalZIndex(1000),
-        ));
+        // Transparent overlay; the descent ramps it up in its final stretch.
+        spawn_landing_fade(&mut commands, 0.0);
     }
+}
+
+/// Full-screen dark overlay for the land/take-off transitions, at initial `alpha`.
+fn spawn_landing_fade(commands: &mut Commands, alpha: f32) {
+    commands.spawn((
+        LandingFade,
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.02, 0.03, 0.06, alpha)),
+        GlobalZIndex(1000),
+    ));
 }
 
 /// Drive the descent: dive the ship toward the planet (it grows in view), pitch
@@ -299,7 +321,8 @@ fn landing_anim(
     mut ship: Query<(&mut WorldPos, &mut Transform, &mut ShipVelocity), With<PlayerShip>>,
     mut landed: ResMut<LandedBiome>,
     mut next: ResMut<NextState<Mode>>,
-    mut fades: Query<&mut BackgroundColor, With<LandingFade>>,
+    mut commands: Commands,
+    mut fades: Query<(Entity, &mut BackgroundColor), With<LandingFade>>,
 ) {
     if !landing.active {
         return;
@@ -310,21 +333,33 @@ fn landing_anim(
     let k = tt * tt * (3.0 - 2.0 * tt); // smoothstep ease
     wp.0 = landing.start.lerp(landing.target, k as f64);
     vel.0 = Vec3::ZERO;
-    let to_center = (landing.center - wp.0).as_vec3();
-    if to_center.length_squared() > 1e-6 {
-        tf.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, to_center.normalize());
+    // Nose points along the direction of travel (down when landing, up when taking off).
+    let travel = (landing.target - landing.start).as_vec3();
+    if travel.length_squared() > 1e-6 {
+        tf.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, travel.normalize());
     }
-    // Fade to dark over the final 40% to hide the scene swap.
-    let fade = ((landing.t - 0.6) / 0.4).clamp(0.0, 1.0);
-    for mut bg in &mut fades {
+    // Descent fades to dark over the final 40%; ascent reveals over the first 50%.
+    let fade = if landing.descending {
+        ((landing.t - 0.6) / 0.4).clamp(0.0, 1.0)
+    } else {
+        (1.0 - landing.t / 0.5).clamp(0.0, 1.0)
+    };
+    let done = landing.t >= 1.0;
+    for (e, mut bg) in &mut fades {
         bg.0 = Color::srgba(0.02, 0.03, 0.06, fade);
-    }
-    if landing.t >= 1.0 {
-        landing.active = false;
-        if let Some(kind) = landing.kind {
-            landed.0 = Biome::from_planet(kind);
+        // Ascent ends in flight, where landing_fade_out doesn't run — clean up here.
+        if done && !landing.descending {
+            commands.entity(e).despawn();
         }
-        next.set(Mode::OnFoot);
+    }
+    if done {
+        landing.active = false;
+        if landing.descending {
+            if let Some(kind) = landing.kind {
+                landed.0 = Biome::from_planet(kind);
+            }
+            next.set(Mode::OnFoot);
+        }
     }
 }
 
@@ -344,15 +379,34 @@ fn landing_fade_out(
     }
 }
 
-/// F / gamepad-Y takes off back to flight.
+/// F / gamepad-North takes off: switch to flight and ascend away from the planet.
 fn takeoff_input(
     keys: Res<ButtonInput<KeyCode>>,
     gamepads: Query<&Gamepad>,
     mut next: ResMut<NextState<Mode>>,
+    mut landing: ResMut<Landing>,
+    ship: Query<&WorldPos, With<PlayerShip>>,
+    planets: Query<(&WorldPos, &PlanetBody)>,
+    mut commands: Commands,
 ) {
     let pad = gamepads.iter().next().is_some_and(|g| g.just_pressed(GamepadButton::North));
-    if keys.just_pressed(KeyCode::KeyF) || pad {
-        next.set(Mode::Flight);
+    if !(keys.just_pressed(KeyCode::KeyF) || pad) || landing.active {
+        return;
+    }
+    next.set(Mode::Flight);
+    let Ok(s) = ship.get_single() else { return };
+    // Ascend away from the nearest planet (the one we landed on).
+    let mut best: Option<(f64, DVec3, f32)> = None;
+    for (p, b) in &planets {
+        let d = (p.0 - s.0).length();
+        if best.map_or(true, |(bd, ..)| d < bd) {
+            best = Some((d, p.0, b.radius));
+        }
+    }
+    if let Some((_, center, radius)) = best {
+        landing.start_ascent(s.0, center, radius as f64);
+        // Start dark and reveal as the ship rises, hiding the scene swap.
+        spawn_landing_fade(&mut commands, 1.0);
     }
 }
 

@@ -317,6 +317,14 @@ fn dev_screenshot(
                 dev.landing.start_to(wp.0, p.pos, p.radius, p.kind);
             }
         }
+        // GR_TAKEOFF: ship near the surface, ascending away (verifies take-off).
+        if std::env::var("GR_TAKEOFF").is_ok() {
+            if let (Some(p), Ok((mut wp, _, _))) = (g.planets.first(), ship.get_single_mut()) {
+                let dir = bevy::math::DVec3::new(0.0, 0.0, 1.0);
+                wp.0 = p.pos + dir * (p.radius + 0.2e6);
+                dev.landing.start_ascent(wp.0, p.pos, p.radius);
+            }
+        }
         for (i, p) in g.planets.iter().enumerate() {
             eprintln!("PLANET {i}: pos={:?} radius={:.0} kind={:?}", p.pos, p.radius, p.kind);
         }
