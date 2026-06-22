@@ -5,8 +5,8 @@
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
 use crate::creatures::{
-    build_creature_children, capture_chance, effectiveness, gain_exp, CaughtCreature, Collection,
-    Creature, CreatureKind, Engaged, Inventory, PlayerStats, CAPTURE_REWARD,
+    build_creature_children, capture_chance, effectiveness, gain_exp, Ailment, CaughtCreature,
+    Collection, Creature, CreatureKind, Engaged, Inventory, PlayerStats, CAPTURE_REWARD,
 };
 use crate::hud::Wallet;
 use crate::onfoot::{Mode, SURFACE_LAYER};
@@ -38,10 +38,10 @@ pub struct Battle {
     pub hit_timer: f32,
     pub player_lunge: f32,
     pub enemy_stunned: bool,
-    pub enemy_ailment: u32,
-    pub enemy_ailment_label: &'static str,
-    pub player_ailment: u32,
-    pub player_ailment_label: &'static str,
+    pub enemy_ailment: Option<Ailment>,
+    pub enemy_ailment_turns: u32,
+    pub player_ailment: Option<Ailment>,
+    pub player_ailment_turns: u32,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -103,10 +103,6 @@ pub fn move_damage(power: f32, level: u32, eff: f32) -> f32 {
 pub fn enemy_damage(power: f32, level: u32, eff: f32) -> f32 {
     (power * 0.6 + level as f32) * eff
 }
-/// Per-turn damage from a lingering ailment (burn/poison/etc).
-pub fn ailment_damage(level: u32) -> f32 {
-    6.0 + level as f32 * 0.8
-}
 /// Turns an inflicted ailment lasts.
 const AILMENT_TURNS: u32 = 3;
 
@@ -135,10 +131,10 @@ fn start_battle(
         hit_timer: 0.0,
         player_lunge: 0.0,
         enemy_stunned: false,
-        enemy_ailment: 0,
-        enemy_ailment_label: "",
-        player_ailment: 0,
-        player_ailment_label: "",
+        enemy_ailment: None,
+        enemy_ailment_turns: 0,
+        player_ailment: None,
+        player_ailment_turns: 0,
     };
     next.set(Phase::Encounter);
 }
@@ -400,7 +396,14 @@ fn menu_input(
             }
             stats.sp -= m.sp_cost as f32;
             let eff = effectiveness(m.element, kind.element());
-            let dmg = move_damage(m.power, stats.level, eff);
+            let mut dmg = move_damage(m.power, stats.level, eff);
+            // Soak weakens your attacks; Crack makes the enemy take more.
+            if let Some(a) = battle.player_ailment {
+                dmg *= a.outgoing_mult();
+            }
+            if let Some(a) = battle.enemy_ailment {
+                dmg *= a.incoming_mult();
+            }
             battle.hp = (battle.hp - dmg).max(0.0);
             battle.hit_timer = 0.22;
             battle.player_lunge = LUNGE_DURATION;
@@ -410,10 +413,11 @@ fn menu_input(
                 _ => "",
             };
             log.0 = format!("{} hits for {dmg:.0}!{tag}", m.name);
-            if m.ailment {
-                battle.enemy_ailment = AILMENT_TURNS;
-                battle.enemy_ailment_label = m.element.ailment_label();
-                log.0 = format!("{}  {kind:?} is {}!", log.0, battle.enemy_ailment_label);
+            if m.ailment && battle.enemy_ailment.is_none() {
+                let a = Ailment::from_element(m.element);
+                battle.enemy_ailment = Some(a);
+                battle.enemy_ailment_turns = AILMENT_TURNS;
+                log.0 = format!("{}  {kind:?} is {}!", log.0, a.label());
             }
             menu.page = Page::Main;
             menu.cursor = 0;
@@ -480,12 +484,17 @@ fn menu_input(
     }
 
     // A lingering ailment ticks before the enemy gets to act.
-    if battle.enemy_ailment > 0 {
-        let d = ailment_damage(battle.level);
-        battle.hp = (battle.hp - d).max(0.0);
-        battle.enemy_ailment -= 1;
-        battle.hit_timer = 0.22;
-        log.0 = format!("{}  {kind:?} suffers {} (-{d:.0}).", log.0, battle.enemy_ailment_label);
+    if let Some(a) = battle.enemy_ailment {
+        let d = a.dot(battle.level);
+        if d > 0.0 {
+            battle.hp = (battle.hp - d).max(0.0);
+            battle.hit_timer = 0.22;
+            log.0 = format!("{}  {kind:?} suffers {} (-{d:.0}).", log.0, a.label());
+        }
+        battle.enemy_ailment_turns -= 1;
+        if battle.enemy_ailment_turns == 0 {
+            battle.enemy_ailment = None;
+        }
     }
 
     // Enemy fainted from the hit or its ailment?
@@ -510,25 +519,38 @@ fn menu_input(
     let emoves = kind.moves();
     let m = emoves[rand::random::<u32>() as usize % emoves.len()];
     let eff = effectiveness(m.element, lead_kind.element());
-    let edmg = enemy_damage(m.power, battle.level, eff);
+    let mut edmg = enemy_damage(m.power, battle.level, eff);
+    // Soak weakens the enemy's attacks; Crack makes you take more.
+    if let Some(a) = battle.enemy_ailment {
+        edmg *= a.outgoing_mult();
+    }
+    if let Some(a) = battle.player_ailment {
+        edmg *= a.incoming_mult();
+    }
     stats.hp = (stats.hp - edmg).max(0.0);
     let tag = if eff > 1.0 { "  It's a rough matchup!" } else { "" };
     log.0 = format!("{}  Wild {kind:?} used {} for {edmg:.0}!{tag}", log.0, m.name);
-    if m.ailment && battle.player_ailment == 0 {
-        battle.player_ailment = AILMENT_TURNS;
-        battle.player_ailment_label = m.element.ailment_label();
-        log.0 = format!("{}  You are {}!", log.0, battle.player_ailment_label);
+    if m.ailment && battle.player_ailment.is_none() {
+        let a = Ailment::from_element(m.element);
+        battle.player_ailment = Some(a);
+        battle.player_ailment_turns = AILMENT_TURNS;
+        log.0 = format!("{}  You are {}!", log.0, a.label());
     }
     // Your own ailment ticks at the end of the round.
-    if battle.player_ailment > 0 {
-        let d = ailment_damage(battle.level);
-        stats.hp = (stats.hp - d).max(0.0);
-        battle.player_ailment -= 1;
-        log.0 = format!("{}  You suffer {} (-{d:.0}).", log.0, battle.player_ailment_label);
+    if let Some(a) = battle.player_ailment {
+        let d = a.dot(battle.level);
+        if d > 0.0 {
+            stats.hp = (stats.hp - d).max(0.0);
+            log.0 = format!("{}  You suffer {} (-{d:.0}).", log.0, a.label());
+        }
+        battle.player_ailment_turns -= 1;
+        if battle.player_ailment_turns == 0 {
+            battle.player_ailment = None;
+        }
     }
     if stats.hp <= 0.0 {
         stats.hp = stats.max_hp * 0.5;
-        battle.player_ailment = 0;
+        battle.player_ailment = None;
         log.0 = "You were overwhelmed — retreated to safety!".into();
         next.set(Phase::Roam);
     }
@@ -753,11 +775,10 @@ fn update_battle_ui(
         col.0 = hp_color(pfrac);
     }
     if let Ok(mut t) = q.p0().get_single_mut() {
-        let ail = if battle.enemy_ailment > 0 {
-            format!("   [{}]", battle.enemy_ailment_label)
-        } else {
-            String::new()
-        };
+        let ail = battle
+            .enemy_ailment
+            .map(|a| format!("   [{}]", a.label()))
+            .unwrap_or_default();
         t.0 = format!("Wild {kind:?}   Lv{}{ail}", battle.level);
     }
     if let Ok(mut t) = q.p1().get_single_mut() {
@@ -769,11 +790,10 @@ fn update_battle_ui(
             .first()
             .map(|l| format!("{} Lv{}   ", l.kind.name(), l.level))
             .unwrap_or_default();
-        let ail = if battle.player_ailment > 0 {
-            format!("   [{}]", battle.player_ailment_label)
-        } else {
-            String::new()
-        };
+        let ail = battle
+            .player_ailment
+            .map(|a| format!("   [{}]", a.label()))
+            .unwrap_or_default();
         t.0 = format!(
             "{lead}YOU  HP {:.0}/{:.0}  SP {:.0}/{:.0}{ail}",
             stats.hp, stats.max_hp, stats.sp, stats.max_sp
@@ -837,9 +857,17 @@ mod tests {
     }
 
     #[test]
-    fn ailment_damage_is_positive_and_scales() {
-        assert!(ailment_damage(1) > 0.0);
-        assert!(ailment_damage(20) > ailment_damage(1));
+    fn ailments_have_distinct_effects() {
+        use crate::creatures::Ailment;
+        // DOT ailments deal scaling damage; control ailments deal none.
+        assert!(Ailment::Burn.dot(20) > Ailment::Burn.dot(1) && Ailment::Burn.dot(1) > 0.0);
+        assert!(Ailment::Poison.dot(5) > 0.0);
+        assert_eq!(Ailment::Soak.dot(5), 0.0);
+        assert_eq!(Ailment::Crack.dot(5), 0.0);
+        // Soak weakens outgoing damage; Crack raises incoming damage.
+        assert!(Ailment::Soak.outgoing_mult() < 1.0);
+        assert!(Ailment::Crack.incoming_mult() > 1.0);
+        assert_eq!(Ailment::Burn.outgoing_mult(), 1.0);
     }
 
     #[test]

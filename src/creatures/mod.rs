@@ -28,16 +28,49 @@ pub enum Element {
     Fire,
 }
 
-impl Element {
-    /// The lingering ailment this element inflicts (flavour for a shared
-    /// damage-over-time mechanic).
-    pub fn ailment_label(self) -> &'static str {
-        match self {
-            Element::Grass => "Poisoned",
-            Element::Water => "Drenched",
-            Element::Rock => "Cracked",
-            Element::Fire => "Burned",
+/// A lingering battle ailment. Each element inflicts a distinct one: Burn/Poison
+/// deal damage over time, Soak weakens the victim's attacks, Crack raises the
+/// damage it takes.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Ailment {
+    Burn,
+    Poison,
+    Soak,
+    Crack,
+}
+
+impl Ailment {
+    pub fn from_element(e: Element) -> Self {
+        match e {
+            Element::Fire => Ailment::Burn,
+            Element::Grass => Ailment::Poison,
+            Element::Water => Ailment::Soak,
+            Element::Rock => Ailment::Crack,
         }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Ailment::Burn => "Burned",
+            Ailment::Poison => "Poisoned",
+            Ailment::Soak => "Drenched",
+            Ailment::Crack => "Cracked",
+        }
+    }
+    /// Damage dealt to the victim each turn (0 for non-DOT ailments).
+    pub fn dot(self, level: u32) -> f32 {
+        match self {
+            Ailment::Burn => 6.0 + level as f32 * 0.8,
+            Ailment::Poison => 9.0 + level as f32 * 1.0,
+            _ => 0.0,
+        }
+    }
+    /// Multiplier on damage the victim DEALS (Soak weakens its attacks).
+    pub fn outgoing_mult(self) -> f32 {
+        if self == Ailment::Soak { 0.6 } else { 1.0 }
+    }
+    /// Multiplier on damage the victim TAKES (Crack lowers its defense).
+    pub fn incoming_mult(self) -> f32 {
+        if self == Ailment::Crack { 1.25 } else { 1.0 }
     }
 }
 
