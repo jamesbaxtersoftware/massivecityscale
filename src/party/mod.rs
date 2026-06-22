@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 use crate::battle::Phase;
-use crate::creatures::Collection;
+use crate::creatures::{Collection, CreatureKind};
 use crate::onfoot::Mode;
 
 #[derive(Resource, Default)]
@@ -76,8 +76,17 @@ fn spawn_panel(commands: &mut Commands, collection: &Collection) {
             GlobalZIndex(900),
         ))
         .with_children(|root| {
+            let species = CreatureKind::ALL
+                .iter()
+                .filter(|k| collection.party.iter().any(|c| c.kind == **k))
+                .count();
             root.spawn((
-                Text::new(format!("PARTY  ({})", collection.party.len())),
+                Text::new(format!(
+                    "PARTY  ({})        DEX  {}/{}",
+                    collection.party.len(),
+                    species,
+                    CreatureKind::ALL.len()
+                )),
                 TextFont { font_size: 30.0, ..default() },
                 TextColor(Color::srgb(1.0, 0.92, 0.6)),
             ));

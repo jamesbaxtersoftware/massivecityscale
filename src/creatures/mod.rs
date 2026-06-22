@@ -98,6 +98,14 @@ pub struct Move {
 }
 
 impl CreatureKind {
+    /// Every species, for dex counts and iteration.
+    pub const ALL: [CreatureKind; 4] = [
+        CreatureKind::Grasshog,
+        CreatureKind::Aquabud,
+        CreatureKind::Rockfang,
+        CreatureKind::Flarehog,
+    ];
+
     /// The lead creature's move set: a free typed Tackle, an SP special, and an
     /// SP ultimate that inflicts the element's ailment.
     pub fn moves(self) -> &'static [Move] {

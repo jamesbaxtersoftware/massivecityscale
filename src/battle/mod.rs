@@ -105,6 +105,8 @@ pub fn enemy_damage(power: f32, level: u32, eff: f32) -> f32 {
 }
 /// Turns an inflicted ailment lasts.
 const AILMENT_TURNS: u32 = 3;
+/// Extra crystals for registering a species in the dex for the first time.
+const NEW_SPECIES_BONUS: u32 = 60;
 
 fn start_battle(
     keys: Res<ButtonInput<KeyCode>>,
@@ -435,10 +437,23 @@ fn menu_input(
                 if let Some(e) = battle.enemy {
                     commands.entity(e).despawn();
                 }
+                let new_species = !collection.party.iter().any(|c| c.kind == kind);
                 collection.party.push(CaughtCreature { kind, level: battle.level });
                 let levels = gain_exp(&mut stats, battle.level * 20);
                 wallet.crystals += CAPTURE_REWARD;
                 toasts.push(format!("Caught {}!", kind.name()));
+                if new_species {
+                    wallet.crystals += NEW_SPECIES_BONUS;
+                    let dex = CreatureKind::ALL
+                        .iter()
+                        .filter(|k| collection.party.iter().any(|c| c.kind == **k))
+                        .count();
+                    toasts.push(format!(
+                        "New species!  {}/{} registered",
+                        dex,
+                        CreatureKind::ALL.len()
+                    ));
+                }
                 if levels > 0 {
                     toasts.push(format!("Level up!  Lv.{}", stats.level));
                 }
