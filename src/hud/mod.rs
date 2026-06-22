@@ -353,7 +353,7 @@ fn update_onfoot_hud(
     if let Ok(mut t) = texts.p2().get_single_mut() {
         let next = crate::creatures::exp_to_next(stats.level);
         t.0 = format!(
-            "Lv.{}   HP {:.0}/{:.0}   SP {:.0}/{:.0}   EXP {}/{}   [C] party",
+            "Lv.{}   HP {:.0}/{:.0}   SP {:.0}/{:.0}   EXP {}/{}   [C] party   [H] help",
             stats.level, stats.hp, stats.max_hp, stats.sp, stats.max_sp, stats.exp, next
         );
     }
@@ -443,7 +443,7 @@ fn update_hud(
                 }
                 None => String::new(),
             };
-            t.0 = format!("{label}  {d}{warp}{biome_line}\n[T] target   [G] warp");
+            t.0 = format!("{label}  {d}{warp}{biome_line}\n[T] target   [G] warp   [H] help");
         }
     }
     if let Ok(mut t) = texts.p3().get_single_mut() {
