@@ -3,6 +3,7 @@ use bevy::prelude::*;
 mod battle;
 mod creatures;
 mod galaxy;
+mod help;
 mod hud;
 mod onfoot;
 mod origin;
@@ -46,6 +47,7 @@ fn main() {
         .add_plugins(save::SavePlugin)
         .add_plugins(party::PartyViewPlugin)
         .add_plugins(toast::ToastPlugin)
+        .add_plugins(help::HelpPlugin)
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.03)))
         // Faint blue fill so planets' shadowed sides read as lit spheres rather
@@ -185,6 +187,7 @@ struct DevSpawns<'w> {
     collection: ResMut<'w, creatures::Collection>,
     party_view: ResMut<'w, party::PartyView>,
     toasts: ResMut<'w, toast::Toasts>,
+    help_view: ResMut<'w, help::HelpView>,
 }
 
 /// save a screenshot to GR_SHOT, then exit. Gated by the GR_SHOT env var.
@@ -214,6 +217,9 @@ fn dev_screenshot(
     if *frame == 6 && std::env::var("GR_TOAST").is_ok() {
         dev.toasts.push("Caught Aquabud!");
         dev.toasts.push("Level up!  Lv.6");
+    }
+    if *frame == 6 && std::env::var("GR_HELP").is_ok() {
+        dev.help_view.open = true;
     }
     // GR_BATTLE: once creatures exist, point the battle at a real one (for the camera).
     if *frame == 6 && std::env::var("GR_BATTLE").is_ok() {
