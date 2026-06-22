@@ -38,6 +38,8 @@ pub struct Battle {
     pub hit_timer: f32,
     pub player_lunge: f32,
     pub enemy_stunned: bool,
+    pub enemy_ailment: u32,
+    pub enemy_ailment_label: &'static str,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -99,6 +101,12 @@ pub fn move_damage(power: f32, level: u32, eff: f32) -> f32 {
 pub fn enemy_damage(power: f32, level: u32, eff: f32) -> f32 {
     (power * 0.6 + level as f32) * eff
 }
+/// Per-turn damage from a lingering ailment (burn/poison/etc).
+pub fn ailment_damage(level: u32) -> f32 {
+    6.0 + level as f32 * 0.8
+}
+/// Turns an inflicted ailment lasts.
+const AILMENT_TURNS: u32 = 3;
 
 fn start_battle(
     keys: Res<ButtonInput<KeyCode>>,
@@ -125,6 +133,8 @@ fn start_battle(
         hit_timer: 0.0,
         player_lunge: 0.0,
         enemy_stunned: false,
+        enemy_ailment: 0,
+        enemy_ailment_label: "",
     };
     next.set(Phase::Encounter);
 }
@@ -396,6 +406,11 @@ fn menu_input(
                 _ => "",
             };
             log.0 = format!("{} hits for {dmg:.0}!{tag}", m.name);
+            if m.ailment {
+                battle.enemy_ailment = AILMENT_TURNS;
+                battle.enemy_ailment_label = m.element.ailment_label();
+                log.0 = format!("{}  {kind:?} is {}!", log.0, battle.enemy_ailment_label);
+            }
             menu.page = Page::Main;
             menu.cursor = 0;
         }
@@ -460,7 +475,16 @@ fn menu_input(
         }
     }
 
-    // Enemy fainted from the hit?
+    // A lingering ailment ticks before the enemy gets to act.
+    if battle.enemy_ailment > 0 {
+        let d = ailment_damage(battle.level);
+        battle.hp = (battle.hp - d).max(0.0);
+        battle.enemy_ailment -= 1;
+        battle.hit_timer = 0.22;
+        log.0 = format!("{}  {kind:?} suffers {} (-{d:.0}).", log.0, battle.enemy_ailment_label);
+    }
+
+    // Enemy fainted from the hit or its ailment?
     if battle.hp <= 0.0 {
         if let Some(e) = battle.enemy {
             commands.entity(e).despawn();
@@ -712,7 +736,12 @@ fn update_battle_ui(
         col.0 = hp_color(pfrac);
     }
     if let Ok(mut t) = q.p0().get_single_mut() {
-        t.0 = format!("Wild {kind:?}   Lv{}", battle.level);
+        let ail = if battle.enemy_ailment > 0 {
+            format!("   [{}]", battle.enemy_ailment_label)
+        } else {
+            String::new()
+        };
+        t.0 = format!("Wild {kind:?}   Lv{}{ail}", battle.level);
     }
     if let Ok(mut t) = q.p1().get_single_mut() {
         t.0 = log.0.clone();
@@ -783,6 +812,27 @@ mod tests {
         assert!(enemy_damage(18.0, 5, 2.0) > enemy_damage(18.0, 5, 1.0));
         // Same move hits softer from the enemy than from the player.
         assert!(enemy_damage(18.0, 5, 1.0) < move_damage(18.0, 5, 1.0));
+    }
+
+    #[test]
+    fn ailment_damage_is_positive_and_scales() {
+        assert!(ailment_damage(1) > 0.0);
+        assert!(ailment_damage(20) > ailment_damage(1));
+    }
+
+    #[test]
+    fn only_ultimate_moves_inflict_ailments() {
+        use crate::creatures::CreatureKind;
+        for k in [
+            CreatureKind::Grasshog,
+            CreatureKind::Aquabud,
+            CreatureKind::Rockfang,
+            CreatureKind::Flarehog,
+        ] {
+            let mvs = k.moves();
+            assert!(!mvs[0].ailment, "{k:?} basic move has no ailment");
+            assert!(mvs.last().unwrap().ailment, "{k:?} ultimate inflicts an ailment");
+        }
     }
 
     #[test]

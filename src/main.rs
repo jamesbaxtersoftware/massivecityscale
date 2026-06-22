@@ -262,6 +262,8 @@ fn dev_screenshot(
                 hit_timer: 0.0,
                 player_lunge: 0.0,
                 enemy_stunned: false,
+                enemy_ailment: 0,
+                enemy_ailment_label: "",
             };
         }
         let g = galaxy::gen::generate(galaxy::WORLD_SEED);
@@ -290,6 +292,10 @@ fn dev_screenshot(
     if *frame == 89 && std::env::var("GR_BATTLE").is_ok() {
         if std::env::var("GR_MOVES").is_ok() {
             dev.battle_menu.page = battle::Page::Move;
+        } else if std::env::var("GR_AILMENT").is_ok() {
+            battle_res.enemy_ailment = 2;
+            battle_res.enemy_ailment_label = "Burned";
+            battle_res.hit_timer = 0.12;
         } else {
             battle_res.player_lunge = 0.16;
             battle_res.hit_timer = 0.12;

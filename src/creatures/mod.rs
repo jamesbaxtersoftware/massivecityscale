@@ -28,6 +28,19 @@ pub enum Element {
     Fire,
 }
 
+impl Element {
+    /// The lingering ailment this element inflicts (flavour for a shared
+    /// damage-over-time mechanic).
+    pub fn ailment_label(self) -> &'static str {
+        match self {
+            Element::Grass => "Poisoned",
+            Element::Water => "Drenched",
+            Element::Rock => "Cracked",
+            Element::Fire => "Burned",
+        }
+    }
+}
+
 /// Damage multiplier when `atk` hits `def` (classic triangle + rock).
 pub fn effectiveness(atk: Element, def: Element) -> f32 {
     use Element::*;
@@ -40,39 +53,42 @@ pub fn effectiveness(atk: Element, def: Element) -> f32 {
     }
 }
 
-/// A battle move: display name, base power, SP cost and damage element.
+/// A battle move: display name, base power, SP cost, damage element, and whether
+/// it inflicts that element's lingering ailment (damage over the next few turns).
 #[derive(Clone, Copy)]
 pub struct Move {
     pub name: &'static str,
     pub power: f32,
     pub sp_cost: u32,
     pub element: Element,
+    pub ailment: bool,
 }
 
 impl CreatureKind {
-    /// The lead creature's move set: a free typed Tackle plus two SP specials.
+    /// The lead creature's move set: a free typed Tackle, an SP special, and an
+    /// SP ultimate that inflicts the element's ailment.
     pub fn moves(self) -> &'static [Move] {
         use Element::*;
         match self {
             CreatureKind::Grasshog => &[
-                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Grass },
-                Move { name: "Vine Lash", power: 18.0, sp_cost: 6, element: Grass },
-                Move { name: "Leaf Storm", power: 26.0, sp_cost: 12, element: Grass },
+                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Grass, ailment: false },
+                Move { name: "Vine Lash", power: 18.0, sp_cost: 6, element: Grass, ailment: false },
+                Move { name: "Leaf Storm", power: 26.0, sp_cost: 12, element: Grass, ailment: true },
             ],
             CreatureKind::Aquabud => &[
-                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Water },
-                Move { name: "Bubble", power: 18.0, sp_cost: 6, element: Water },
-                Move { name: "Torrent", power: 26.0, sp_cost: 12, element: Water },
+                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Water, ailment: false },
+                Move { name: "Bubble", power: 18.0, sp_cost: 6, element: Water, ailment: false },
+                Move { name: "Torrent", power: 26.0, sp_cost: 12, element: Water, ailment: true },
             ],
             CreatureKind::Rockfang => &[
-                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Rock },
-                Move { name: "Rock Throw", power: 18.0, sp_cost: 6, element: Rock },
-                Move { name: "Boulder", power: 28.0, sp_cost: 13, element: Rock },
+                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Rock, ailment: false },
+                Move { name: "Rock Throw", power: 18.0, sp_cost: 6, element: Rock, ailment: false },
+                Move { name: "Boulder", power: 28.0, sp_cost: 13, element: Rock, ailment: true },
             ],
             CreatureKind::Flarehog => &[
-                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Fire },
-                Move { name: "Ember", power: 18.0, sp_cost: 6, element: Fire },
-                Move { name: "Flamethrow", power: 26.0, sp_cost: 12, element: Fire },
+                Move { name: "Tackle", power: 10.0, sp_cost: 0, element: Fire, ailment: false },
+                Move { name: "Ember", power: 18.0, sp_cost: 6, element: Fire, ailment: false },
+                Move { name: "Flamethrow", power: 26.0, sp_cost: 12, element: Fire, ailment: true },
             ],
         }
     }
