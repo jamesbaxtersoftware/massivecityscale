@@ -294,6 +294,8 @@ fn dev_screenshot(
     if *frame == 89 && std::env::var("GR_BATTLE").is_ok() {
         if std::env::var("GR_MOVES").is_ok() {
             dev.battle_menu.page = battle::Page::Move;
+        } else if std::env::var("GR_ITEM").is_ok() {
+            dev.battle_menu.page = battle::Page::Item;
         } else if std::env::var("GR_AILMENT").is_ok() {
             battle_res.enemy_ailment = Some(creatures::Ailment::Burn);
             battle_res.enemy_ailment_turns = 2;

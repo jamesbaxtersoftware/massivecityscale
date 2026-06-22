@@ -196,10 +196,11 @@ pub struct Inventory {
     pub heal_spray: u32,
     pub revive: u32,
     pub flash_bomb: u32,
+    pub antidote: u32,
 }
 impl Default for Inventory {
     fn default() -> Self {
-        Self { capture_disc: 23, bait: 12, heal_spray: 8, revive: 3, flash_bomb: 6 }
+        Self { capture_disc: 23, bait: 12, heal_spray: 8, revive: 3, flash_bomb: 6, antidote: 5 }
     }
 }
 

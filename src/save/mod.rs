@@ -23,6 +23,7 @@ pub struct SaveData {
     pub heal: u32,
     pub revive: u32,
     pub flash: u32,
+    pub antidote: u32,
     pub party: Vec<(CreatureKind, u32)>,
 }
 
@@ -34,9 +35,9 @@ pub fn serialize(d: &SaveData) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "level={}\nexp={}\nhp={}\nmaxhp={}\nsp={}\nmaxsp={}\ncrystals={}\ndisc={}\nbait={}\nheal={}\nrevive={}\nflash={}\nparty={}\n",
+        "level={}\nexp={}\nhp={}\nmaxhp={}\nsp={}\nmaxsp={}\ncrystals={}\ndisc={}\nbait={}\nheal={}\nrevive={}\nflash={}\nantidote={}\nparty={}\n",
         d.level, d.exp, d.hp, d.max_hp, d.sp, d.max_sp, d.crystals, d.disc, d.bait, d.heal,
-        d.revive, d.flash, party
+        d.revive, d.flash, d.antidote, party
     )
 }
 
@@ -74,6 +75,7 @@ pub fn deserialize(s: &str) -> Option<SaveData> {
         heal: u("heal")?,
         revive: u("revive")?,
         flash: u("flash")?,
+        antidote: u("antidote").unwrap_or(0),
         party,
     })
 }
@@ -101,6 +103,7 @@ fn gather(stats: &PlayerStats, wallet: &Wallet, inv: &Inventory, col: &Collectio
         heal: inv.heal_spray,
         revive: inv.revive,
         flash: inv.flash_bomb,
+        antidote: inv.antidote,
         party: col.party.iter().map(|c| (c.kind, c.level)).collect(),
     }
 }
@@ -124,6 +127,7 @@ fn apply(
     inv.heal_spray = d.heal;
     inv.revive = d.revive;
     inv.flash_bomb = d.flash;
+    inv.antidote = d.antidote;
     col.party = d.party.iter().map(|(k, l)| CaughtCreature { kind: *k, level: *l }).collect();
 }
 
@@ -189,6 +193,7 @@ mod tests {
             heal: 6,
             revive: 3,
             flash: 4,
+            antidote: 5,
             party: vec![
                 (CreatureKind::Flarehog, 12),
                 (CreatureKind::Aquabud, 8),

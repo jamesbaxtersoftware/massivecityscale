@@ -327,7 +327,7 @@ fn menu_input(
     }
     menu.cursor = r * 2 + c;
 
-    if back && menu.page == Page::Item {
+    if back && menu.page != Page::Main {
         menu.page = Page::Main;
         menu.cursor = 0;
         return;
@@ -352,6 +352,7 @@ fn menu_input(
         Heal,
         Bait,
         Flash,
+        Antidote,
         Back,
     }
     let act = match (menu.page, menu.cursor) {
@@ -364,7 +365,7 @@ fn menu_input(
         (Page::Item, 0) => Act::Heal,
         (Page::Item, 1) => Act::Bait,
         (Page::Item, 2) => Act::Flash,
-        (Page::Item, _) => Act::Back,
+        (Page::Item, _) => Act::Antidote,
     };
 
     match act {
@@ -478,6 +479,22 @@ fn menu_input(
             inv.flash_bomb -= 1;
             battle.enemy_stunned = true;
             log.0 = format!("Flash! The {kind:?} is dazzled.");
+            menu.page = Page::Main;
+            menu.cursor = 0;
+        }
+        Act::Antidote => {
+            if battle.player_ailment.is_none() {
+                log.0 = "Nothing to cure.".into();
+                return;
+            }
+            if inv.antidote == 0 {
+                log.0 = "No Antidote!".into();
+                return;
+            }
+            inv.antidote -= 1;
+            let was = battle.player_ailment.take().map(|a| a.label()).unwrap_or("");
+            battle.player_ailment_turns = 0;
+            log.0 = format!("Antidote! Your {was} cleared.");
             menu.page = Page::Main;
             menu.cursor = 0;
         }
@@ -827,7 +844,7 @@ fn update_battle_ui(
             format!("Heal ({})", inv.heal_spray),
             format!("Bait ({})", inv.bait),
             format!("Flash ({})", inv.flash_bomb),
-            "Back".to_string(),
+            format!("Antidote ({})", inv.antidote),
         ],
     };
     for (l, mut t) in &mut q.p3() {
